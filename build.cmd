@@ -10,14 +10,15 @@ cd /d "%ROOT%build"
 
 cl /nologo /O2 /MT /LD /Fe:HWCursor.dll "%ROOT%src\hwcursor.cpp" /link /DLL user32.lib gdi32.lib || exit /b 1
 cl /nologo /O2 /MT /LD /Fe:WasdScroll.dll "%ROOT%src\wasd.cpp" /link /DLL user32.lib || exit /b 1
+cl /nologo /O2 /MT /LD /Fe:RA2Enhancements.dll "%ROOT%src\ra2enhancements.cpp" /link /DLL || exit /b 1
 cl /nologo /O2 /MT /LD /Fe:dsound.dll "%ROOT%src\dsoundproxy.cpp" /link /DLL || exit /b 1
 
 if not exist "%ROOT%_dist" mkdir "%ROOT%_dist"
-for %%F in (HWCursor.dll WasdScroll.dll dsound.dll) do (
+for %%F in (HWCursor.dll WasdScroll.dll RA2Enhancements.dll dsound.dll) do (
     copy /y "%%F" "%GAME%\%%F" >nul
     copy /y "%%F" "%ROOT%_dist\%%F" >nul
 )
-for %%F in (HWCursor.dll.inj WasdScroll.dll.inj) do (
+for %%F in (HWCursor.dll.inj WasdScroll.dll.inj RA2Enhancements.dll.inj) do (
     copy /y "%ROOT%src\%%F" "%GAME%\%%F" >nul
     copy /y "%ROOT%src\%%F" "%ROOT%_dist\%%F" >nul
 )
@@ -27,3 +28,4 @@ echo.
 echo dsound.dll    -^> proxy only, loads whichever feature DLLs are present (vanilla)
 echo HWCursor.dll  -^> hardware cursor      + .inj for Syringe
 echo WasdScroll.dll-^> WASD map scrolling   + .inj for Syringe, optional
+echo RA2Enhancements.dll -^> select-all voice spam fix + .inj for Syringe, optional

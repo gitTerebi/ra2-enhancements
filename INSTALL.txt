@@ -15,6 +15,12 @@ folder (the one with gamemd.exe / game.exe in it).
                    edge scroll you already have. Ctrl and Alt are ignored
                    so hotkeys still work.
 
+  RA2Enhancements.dll
+                   small engine fixes. Currently: select-all-of-type (T)
+                   and select-all-combatants (Q) no longer make every unit
+                   shout its select line at once. One unit answers, like
+                   band-box and team select already do.
+
 
 Vanilla Red Alert 2 / Yuri's Revenge
 ------------------------------------
@@ -22,7 +28,8 @@ dsound.dll is the loader and does nothing else, so it is always needed.
 
   Cursor          dsound.dll + HWCursor.dll
   WASD            dsound.dll + WasdScroll.dll
-  Both            dsound.dll + HWCursor.dll + WasdScroll.dll
+  Fixes           dsound.dll + RA2Enhancements.dll
+  All             dsound.dll + HWCursor.dll + WasdScroll.dll + RA2Enhancements.dll
 
 The game imports DirectSound statically, so Windows loads our dsound.dll
 from the game folder before the first instruction runs. It forwards all 12
@@ -35,6 +42,7 @@ Mental Omega (and anything else on Syringe)
 -------------------------------------------
   Cursor          HWCursor.dll + HWCursor.dll.inj
   WASD            WasdScroll.dll + WasdScroll.dll.inj
+  Fixes           RA2Enhancements.dll + RA2Enhancements.dll.inj
 
 Syringe scans *.dll in the game folder and picks up the matching .inj on
 the next launch. syringe.log will name whichever loaded. Either pair works
@@ -65,6 +73,8 @@ HWCursor.dll         hardware cursor, both load paths
 HWCursor.dll.inj     Syringe hook list for the above
 WasdScroll.dll       WASD scroll, both load paths, optional
 WasdScroll.dll.inj   Syringe hook list for the above
+RA2Enhancements.dll  engine fixes, both load paths, optional
+RA2Enhancements.dll.inj  Syringe hook list for the above (gamemd.exe only)
 
 32-bit only, matching the game. Built with the VS 2022 x86 toolset.
 MIT licensed. Not affiliated with or endorsed by EA.

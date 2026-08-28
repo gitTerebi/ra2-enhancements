@@ -2,7 +2,7 @@
 #include <string.h>
 #include "dsoundforward.h"
 
-static const char *kSidecars[] = {"HWCursor.dll", "WasdScroll.dll"};
+static const char *kSidecars[] = {"HWCursor.dll", "WasdScroll.dll", "RA2Enhancements.dll"};
 
 static bool HostIsGame()
 {
