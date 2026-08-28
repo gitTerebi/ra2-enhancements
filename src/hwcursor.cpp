@@ -267,17 +267,6 @@ static void EnableDpiAwareness()
         legacy();
 }
 
-#ifdef HWCURSOR_SELFPATCH
-
-#ifdef HWCURSOR_BINKPROXY
-#include "binkforward.h"
-#endif
-
-#ifdef HWCURSOR_DSOUNDPROXY
-#include "dsoundforward.h"
-#endif
-
-static bool g_selfPatched;
 static DWORD g_earlyOut;
 
 static __declspec(naked) void StubEax()
@@ -333,30 +322,8 @@ static bool InstallInlineHook()
     return true;
 }
 
-// off the loader lock: WasdScroll.dll is an optional drop-in, absent means no WASD
-static void LoadWasdSidecar()
-{
-    if (!g_selfPatched || GetModuleHandleA("WasdScroll.dll"))
-        return;
-
-    char path[MAX_PATH];
-    DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
-    if (!n || n >= sizeof(path))
-        return;
-    char *slash = strrchr(path, '\\');
-    if (!slash || (slash - path) + 16 >= sizeof(path))
-        return;
-    strcpy(slash + 1, "WasdScroll.dll");
-    LoadLibraryA(path);
-}
-
-#endif
-
 static DWORD WINAPI TickThread(LPVOID)
 {
-#ifdef HWCURSOR_SELFPATCH
-    LoadWasdSidecar();
-#endif
     for (;;)
     {
         DWORD pid = 0;
@@ -372,17 +339,12 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(mod);
-#ifdef HWCURSOR_DSOUNDPROXY
-        DSoundLoadReal();
-#endif
         if (!HostIsGame())
             return TRUE;
         EnableDpiAwareness();
-#ifdef HWCURSOR_SELFPATCH
         g_game = DetectGame();
         if (!IsDebuggerPresent())
-            g_selfPatched = InstallInlineHook();
-#endif
+            InstallInlineHook();
         CloseHandle(CreateThread(NULL, 0, TickThread, NULL, 0, NULL));
     }
     return TRUE;

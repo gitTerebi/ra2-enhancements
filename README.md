@@ -25,17 +25,20 @@ one with `gamemd.exe` / `game.exe` in it).
 
 ### Vanilla Red Alert 2 / Yuri's Revenge
 
+`dsound.dll` is the loader and does nothing else, so it is always needed. Add the
+feature DLLs you want next to it.
+
 | Want | Copy |
 | --- | --- |
-| Cursor | `dsound.dll` |
-| Cursor + WASD | `dsound.dll` and `WasdScroll.dll` |
+| Cursor | `dsound.dll` + `HWCursor.dll` |
+| WASD | `dsound.dll` + `WasdScroll.dll` |
+| Both | `dsound.dll` + `HWCursor.dll` + `WasdScroll.dll` |
 
 The game statically imports DirectSound, so Windows loads our `dsound.dll` from the game
 folder before the first instruction runs. It forwards all 12 exports to the real
-`C:\Windows\SysWOW64\dsound.dll`, so **audio is untouched**, and it loads
-`WasdScroll.dll` from the same folder if you put it there.
-
-`WasdScroll.dll` has no loader of its own on vanilla, so it needs `dsound.dll` present.
+`C:\Windows\SysWOW64\dsound.dll`, so **audio is untouched**, then loads whichever of
+`HWCursor.dll` and `WasdScroll.dll` it finds beside it. Neither has a loader of its own
+on vanilla.
 
 ### Mental Omega (and anything else on Syringe)
 
@@ -45,14 +48,15 @@ folder before the first instruction runs. It forwards all 12 exports to the real
 | WASD | `WasdScroll.dll` + `WasdScroll.dll.inj` |
 
 Either pair works on its own. Syringe scans `*.dll` in the game folder and picks up the
-matching `.inj` on the next launch. `syringe.log` will name both if they loaded.
+matching `.inj` on the next launch. `syringe.log` will name whichever loaded.
 
-The `dsound.dll` proxy is harmless alongside Syringe but is not needed — it detects
-Syringe and stands down.
+`dsound.dll` is harmless alongside Syringe but is not needed — it detects Syringe and
+stands down, leaving the loading to it.
 
 ### Uninstall
 
-Delete the files. Deleting `WasdScroll.dll` leaves the cursor working.
+Delete the file for the feature you do not want. The DLLs are independent, so removing
+one leaves the other working.
 
 ## Compatibility
 
@@ -82,11 +86,16 @@ and copies them into the game folder above the repo.
 
 | File | What |
 | --- | --- |
-| `src/gameprofile.h` | game detection and the per-exe address tables both DLLs need |
-| `src/hwcursor.cpp` | the cursor: SHP frame to `HCURSOR`, palette conversion, cache |
-| `src/wasd.cpp` | WASD scroll: inline hook on the scroll tick, plus a key-synth fallback |
-| `src/dsoundforward.h` | the 12-export DirectSound proxy for the vanilla load path |
+| `src/gameprofile.h` | game detection and the per-exe address tables both feature DLLs need |
+| `src/hwcursor.cpp` | `HWCursor.dll` — SHP frame to `HCURSOR`, palette conversion, cache |
+| `src/wasd.cpp` | `WasdScroll.dll` — inline hook on the scroll tick, plus a key-synth fallback |
+| `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
+| `src/dsoundforward.h` | the 12 DirectSound export thunks |
 | `src/videocfg.cpp` | `RA2Video.exe` |
+
+Each feature DLL patches the game itself when loaded by the proxy, and stands down under
+Syringe (`IsDebuggerPresent`) so the `.inj` hooks are the only ones applied. That is what
+lets one binary serve both load paths.
 
 The hardcoded addresses live in one table in `src/gameprofile.h`, one row per exe. Each
 DLL confirms the exe by matching bytes at an address nothing else patches, never at a

@@ -1,0 +1,70 @@
+RA2 HWCursor + WASD
+===================
+https://github.com/gitTerebi/ra2-hwcursor-wasd
+
+Two features, one DLL each. Copy only the ones you want into your game
+folder (the one with gamemd.exe / game.exe in it).
+
+  HWCursor.dll     hardware mouse cursor. RA2 blits its cursor into the
+                   frame like any other sprite, so the pointer only moves
+                   when the game draws. This makes it a real Windows
+                   cursor, which moves at your mouse's poll rate instead.
+                   Colours and hotspots come from the game's own art.
+
+  WasdScroll.dll   smooth WASD map scrolling, on top of the arrow keys and
+                   edge scroll you already have. Ctrl and Alt are ignored
+                   so hotkeys still work.
+
+
+Vanilla Red Alert 2 / Yuri's Revenge
+------------------------------------
+dsound.dll is the loader and does nothing else, so it is always needed.
+
+  Cursor          dsound.dll + HWCursor.dll
+  WASD            dsound.dll + WasdScroll.dll
+  Both            dsound.dll + HWCursor.dll + WasdScroll.dll
+
+The game imports DirectSound statically, so Windows loads our dsound.dll
+from the game folder before the first instruction runs. It forwards all 12
+exports to the real C:\Windows\SysWOW64\dsound.dll, so audio is untouched,
+then loads whichever feature DLLs it finds beside it. No launcher, no
+renaming, nothing else.
+
+
+Mental Omega (and anything else on Syringe)
+-------------------------------------------
+  Cursor          HWCursor.dll + HWCursor.dll.inj
+  WASD            WasdScroll.dll + WasdScroll.dll.inj
+
+Syringe scans *.dll in the game folder and picks up the matching .inj on
+the next launch. syringe.log will name whichever loaded. Either pair works
+on its own.
+
+dsound.dll is harmless alongside Syringe but is not needed. It detects
+Syringe and stands down, leaving the loading to it.
+
+
+Uninstall
+---------
+Delete the file for the feature you do not want. The DLLs are independent,
+so removing one leaves the other working.
+
+
+RA2Video.exe
+------------
+Optional. Standalone renderer/resolution picker for ddraw.ini. Run it from
+the game folder. Useful with cnc-ddraw, whose fixchilds setting the Mental
+Omega client's own settings screen does not know about.
+
+
+Files
+-----
+dsound.dll           DirectSound proxy and loader, vanilla only
+HWCursor.dll         hardware cursor, both load paths
+HWCursor.dll.inj     Syringe hook list for the above
+WasdScroll.dll       WASD scroll, both load paths, optional
+WasdScroll.dll.inj   Syringe hook list for the above
+RA2Video.exe         video config tool, optional
+
+32-bit only, matching the game. Built with the VS 2022 x86 toolset.
+MIT licensed. Not affiliated with or endorsed by EA.
