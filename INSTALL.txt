@@ -50,11 +50,12 @@ Delete the file for the feature you do not want. The DLLs are independent,
 so removing one leaves the other working.
 
 
-RA2Video.exe
-------------
-Optional. Standalone renderer/resolution picker for ddraw.ini. Run it from
-the game folder. Useful with cnc-ddraw, whose fixchilds setting the Mental
-Omega client's own settings screen does not know about.
+Also worth having
+-----------------
+cnc-ddraw-ra2 is a renderer fork whose fixchilds=5 keeps the RA2 menus
+clickable while the game is upscaled. It also carries RA2Video.exe, the
+resolution picker that used to ship here:
+https://github.com/gitTerebi/cnc-ddraw-ra2
 
 
 Files
@@ -64,7 +65,6 @@ HWCursor.dll         hardware cursor, both load paths
 HWCursor.dll.inj     Syringe hook list for the above
 WasdScroll.dll       WASD scroll, both load paths, optional
 WasdScroll.dll.inj   Syringe hook list for the above
-RA2Video.exe         video config tool, optional
 
 32-bit only, matching the game. Built with the VS 2022 x86 toolset.
 MIT licensed. Not affiliated with or endorsed by EA.

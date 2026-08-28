@@ -13,8 +13,9 @@ game exe.
   the arrow keys and edge scroll you already have. Ctrl and Alt are ignored so hotkeys
   still work. **Fully optional: it is a separate DLL, so leave it out and you do not
   get it.**
-- **RA2Video.exe** — a small renderer/resolution picker for `ddraw.ini`, for use with
-  [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw).
+Pairs with [cnc-ddraw-ra2](https://github.com/gitTerebi/cnc-ddraw-ra2), a renderer fork
+whose `fixchilds=5` keeps the RA2 menus clickable while the game is upscaled. It also
+carries `RA2Video.exe`, the `ddraw.ini` resolution picker that used to ship here.
 
 32-bit, Windows only, matching the game.
 
@@ -79,8 +80,8 @@ Needs the VS 2022 x86 toolset.
 build.cmd
 ```
 
-Outputs `HWCursor.dll`, `WasdScroll.dll`, `dsound.dll` and `RA2Video.exe` into `_dist\`
-and copies them into the game folder above the repo.
+Outputs `HWCursor.dll`, `WasdScroll.dll` and `dsound.dll` into `_dist\` and copies them
+into the game folder above the repo.
 
 ## Source layout
 
@@ -91,7 +92,6 @@ and copies them into the game folder above the repo.
 | `src/wasd.cpp` | `WasdScroll.dll` — inline hook on the scroll tick, plus a key-synth fallback |
 | `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
 | `src/dsoundforward.h` | the 12 DirectSound export thunks |
-| `src/videocfg.cpp` | `RA2Video.exe` |
 
 Each feature DLL patches the game itself when loaded by the proxy, and stands down under
 Syringe (`IsDebuggerPresent`) so the `.inj` hooks are the only ones applied. That is what

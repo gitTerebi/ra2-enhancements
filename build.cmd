@@ -11,10 +11,9 @@ cd /d "%ROOT%build"
 cl /nologo /O2 /MT /LD /Fe:HWCursor.dll "%ROOT%src\hwcursor.cpp" /link /DLL user32.lib gdi32.lib || exit /b 1
 cl /nologo /O2 /MT /LD /Fe:WasdScroll.dll "%ROOT%src\wasd.cpp" /link /DLL user32.lib || exit /b 1
 cl /nologo /O2 /MT /LD /Fe:dsound.dll "%ROOT%src\dsoundproxy.cpp" /link /DLL || exit /b 1
-cl /nologo /O2 /MT /Fe:RA2Video.exe "%ROOT%src\videocfg.cpp" /link user32.lib gdi32.lib comctl32.lib /SUBSYSTEM:WINDOWS || exit /b 1
 
 if not exist "%ROOT%_dist" mkdir "%ROOT%_dist"
-for %%F in (HWCursor.dll WasdScroll.dll dsound.dll RA2Video.exe) do (
+for %%F in (HWCursor.dll WasdScroll.dll dsound.dll) do (
     copy /y "%%F" "%GAME%\%%F" >nul
     copy /y "%%F" "%ROOT%_dist\%%F" >nul
 )
