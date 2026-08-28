@@ -1,0 +1,95 @@
+#pragma once
+#include <windows.h>
+#include <stdlib.h>
+
+namespace SmoothScroll
+{
+    typedef void(__fastcall *SetTacticalPos_t)(void *self, void *unused, int *pos);
+
+    static const BYTE kSetPosSig[5] = {0x83, 0xEC, 0x08, 0x56, 0x57};
+    static const int kPosX = 0xD64;
+    static const int kPosY = 0xD68;
+
+    static const double kSpeed = 1500.0;
+
+    static double g_freq;
+    static LONGLONG g_last;
+    static double g_ax, g_ay;
+    static double g_dt;
+
+    inline bool Available(DWORD setPos)
+    {
+        return setPos && GetModuleHandleA(NULL) == (HMODULE)0x00400000 &&
+               !IsBadReadPtr((void *)setPos, sizeof(kSetPosSig)) &&
+               memcmp((const void *)setPos, kSetPosSig, sizeof(kSetPosSig)) == 0;
+    }
+
+    inline bool Tick(DWORD instance, DWORD setPos)
+    {
+        if (!Available(setPos))
+            return false;
+
+        void *tac = *(void **)instance;
+        if (!tac || IsBadWritePtr(tac, kPosY + 4))
+            return false;
+
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        if (g_freq == 0.0)
+        {
+            LARGE_INTEGER f;
+            QueryPerformanceFrequency(&f);
+            g_freq = (double)f.QuadPart;
+            g_last = now.QuadPart;
+            return true;
+        }
+        double dt = (now.QuadPart - g_last) / g_freq;
+        g_last = now.QuadPart;
+        if (dt > 0.05)
+            dt = 0.05;
+
+        g_dt = g_dt == 0.0 ? dt : g_dt * 0.85 + dt * 0.15;
+
+        DWORD pid = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+
+        int dx = 0, dy = 0;
+        if (pid == GetCurrentProcessId() &&
+            !(GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+            !(GetAsyncKeyState(VK_MENU) & 0x8000))
+        {
+            if (GetAsyncKeyState('A') & 0x8000) --dx;
+            if (GetAsyncKeyState('D') & 0x8000) ++dx;
+            if (GetAsyncKeyState('W') & 0x8000) --dy;
+            if (GetAsyncKeyState('S') & 0x8000) ++dy;
+        }
+
+        if (!dx && !dy)
+        {
+            g_ax = 0.0;
+            g_ay = 0.0;
+            return true;
+        }
+
+        double step = kSpeed * g_dt;
+        if (dx && dy)
+            step *= 0.70710678;
+
+        g_ax += dx * step;
+        g_ay += dy * step;
+
+        int mx = (int)g_ax;
+        int my = (int)g_ay;
+        if (!mx && !my)
+            return true;
+
+        g_ax -= mx;
+        g_ay -= my;
+
+        int pos[2];
+        pos[0] = *(int *)((BYTE *)tac + kPosX) + mx;
+        pos[1] = *(int *)((BYTE *)tac + kPosY) + my;
+        ((SetTacticalPos_t)setPos)(tac, NULL, pos);
+        return true;
+    }
+}
