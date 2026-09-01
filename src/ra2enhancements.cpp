@@ -109,6 +109,114 @@ EXPORT_FUNC(CombatantSelect_LoopDone)
     return 0;
 }
 
+enum { EV_PRODUCE = 0x0E, EV_ABANDON = 0x10, EV_ABANDON_ALL = 0x2E };
+enum { OUTLIST_MAX = 0x80, OUTLIST_MASK = 0x7F, EVENT_SIZE = 111, SHIFT_BATCH = 5 };
+
+typedef void *(__fastcall *FillEventFn)(void *self, void *edx, int player, int kind, int absType,
+                                        int idx, int isNaval);
+typedef DWORD(WINAPI *TimeGetTimeFn)(void);
+
+struct QueueProfile
+{
+    const char *name;
+    DWORD fillEvent;
+    DWORD produceSites[2];
+    DWORD abandonSites[2];
+    DWORD *outCount;
+    DWORD *outIndex;
+    BYTE *outRing;
+    DWORD *outStamps;
+    TimeGetTimeFn *timeGetTime;
+};
+
+static const QueueProfile kQueues[] = {
+    {"gamemd", 0x004C6970,
+     {0x006AB511, 0x006AB76E},
+     {0x006AB1FF, 0x006AB231},
+     (DWORD *)0x00A802C8, (DWORD *)0x00A802D0, (BYTE *)0x00A802D4, (DWORD *)0x00A83A54,
+     (TimeGetTimeFn *)0x007E1530},
+    {"game", 0x004B6280,
+     {0x0068119E, 0x006813EF},
+     {0x00680B42, 0x00680EBE},
+     (DWORD *)0x00A32338, (DWORD *)0x00A32340, (BYTE *)0x00A32344, (DWORD *)0x00A35AC4,
+     (TimeGetTimeFn *)0x0079A524},
+};
+
+static const QueueProfile *g_queue;
+
+static void PushOutList(const void *event)
+{
+    if (*g_queue->outCount >= OUTLIST_MAX)
+        return;
+    DWORD i = *g_queue->outIndex;
+    memcpy(g_queue->outRing + i * EVENT_SIZE, event, EVENT_SIZE);
+    g_queue->outStamps[i] = (*g_queue->timeGetTime)();
+    *g_queue->outIndex = (i + 1) & OUTLIST_MASK;
+    ++*g_queue->outCount;
+}
+
+static void *__fastcall FillEventHook(void *self, void *edx, int player, int kind, int absType,
+                                      int idx, int isNaval)
+{
+    FillEventFn orig = (FillEventFn)g_queue->fillEvent;
+    if (!(GetKeyState(VK_SHIFT) & 0x8000))
+        return orig(self, 0, player, kind, absType, idx, isNaval);
+
+    if (kind == EV_ABANDON_ALL)
+        kind = EV_ABANDON;
+    for (int n = 1; n < SHIFT_BATCH; ++n)
+        PushOutList(orig(self, 0, player, kind, absType, idx, isNaval));
+    return orig(self, 0, player, kind, absType, idx, isNaval);
+}
+
+static bool CallGoesTo(DWORD at, DWORD target)
+{
+    const BYTE *p = (const BYTE *)at;
+    if (IsBadReadPtr(p, 5) || p[0] != 0xE8)
+        return false;
+    return (DWORD)(at + 5 + *(const int *)(p + 1)) == target;
+}
+
+static bool WriteCall(DWORD at, const void *fn)
+{
+    BYTE patch[5];
+    patch[0] = 0xE8;
+    *(DWORD *)(patch + 1) = (DWORD)fn - (at + 5);
+
+    DWORD old = 0;
+    if (!VirtualProtect((void *)at, 5, PAGE_EXECUTE_READWRITE, &old))
+        return false;
+    memcpy((void *)at, patch, 5);
+    VirtualProtect((void *)at, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), (void *)at, 5);
+    return true;
+}
+
+static void InstallQueueBatch()
+{
+    const GameProfile *g = DetectGame();
+    if (!g)
+        return;
+    const QueueProfile *q = NULL;
+    for (int i = 0; i < _countof(kQueues); ++i)
+        if (strcmp(kQueues[i].name, g->name) == 0)
+            q = &kQueues[i];
+    if (!q)
+        return;
+
+    for (int i = 0; i < 2; ++i)
+        if (!CallGoesTo(q->produceSites[i], q->fillEvent) ||
+            !CallGoesTo(q->abandonSites[i], q->fillEvent))
+            return;
+
+    g_queue = q;
+    for (int i = 0; i < 2; ++i)
+    {
+        WriteCall(q->produceSites[i], FillEventHook);
+        WriteCall(q->abandonSites[i], FillEventHook);
+    }
+}
+
 static BYTE *g_stubs;
 static BYTE *g_stubEnd;
 
@@ -206,6 +314,7 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         if (!HostIsGame() || IsDebuggerPresent())
             return TRUE;
         InstallInline();
+        InstallQueueBatch();
     }
     return TRUE;
 }

@@ -10,7 +10,7 @@ cd /d "%ROOT%build"
 
 cl /nologo /O2 /MT /LD /Fe:HWCursor.dll "%ROOT%src\hwcursor.cpp" /link /DLL user32.lib gdi32.lib || exit /b 1
 cl /nologo /O2 /MT /LD /Fe:WasdScroll.dll "%ROOT%src\wasd.cpp" /link /DLL user32.lib || exit /b 1
-cl /nologo /O2 /MT /LD /Fe:RA2Enhancements.dll "%ROOT%src\ra2enhancements.cpp" /link /DLL || exit /b 1
+cl /nologo /O2 /MT /LD /Fe:RA2Enhancements.dll "%ROOT%src\ra2enhancements.cpp" /link /DLL user32.lib || exit /b 1
 cl /nologo /O2 /MT /LD /Fe:dsound.dll "%ROOT%src\dsoundproxy.cpp" /link /DLL || exit /b 1
 
 if not exist "%ROOT%_dist" mkdir "%ROOT%_dist"
