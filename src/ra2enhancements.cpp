@@ -217,6 +217,148 @@ static void InstallQueueBatch()
     }
 }
 
+struct SpeedProfile
+{
+    const char *name;
+    DWORD gameOptions;
+    DWORD sites[2];
+    DWORD delaySite;
+    DWORD pacer;
+    DWORD delaySlot;
+};
+
+// Phobos src/Misc/Hooks.Gamespeed.cpp:11 hooks 0x69BAE7 and 0x55E160; 0x55D78D is delaySite.
+static const SpeedProfile kSpeeds[] = {
+    {"gamemd", 0x00A8EB60, {0x0055D774, 0x0069BAE7}, 0x0055D78C, 0x0055E160, 0x00887350},
+    {"game", 0x00A40B18, {0x0053FFE4, 0x00672E17}, 0x0053FFFC, 0x00540960, 0x00839998},
+};
+
+enum { CAMPAIGN_SPEED = 1 };
+enum { ALT_FAST = 1, ALT_SLOW = 2 };
+
+struct SpeedStep
+{
+    int fastFrames;
+    int slowFrames;
+    const char *label;
+};
+
+static const SpeedStep kSteps[] = {
+    {0, 1, "1.00x (stock)"},
+    {1, 3, "1.14x"},
+    {1, 2, "1.20x"},
+    {1, 1, "1.33x"},
+    {2, 1, "1.50x"},
+    {3, 1, "1.60x"},
+    {1, 0, "2.00x (max)"},
+};
+
+enum { STEP_DEFAULT = 4 };
+
+static void SpeedLog(const char *fmt, ...)
+{
+    char path[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
+    if (!n || n >= sizeof(path))
+        return;
+    char *slash = strrchr(path, '\\');
+    if (!slash)
+        return;
+    strcpy(slash + 1, "campaignspeed.log");
+
+    char line[512];
+    va_list ap;
+    va_start(ap, fmt);
+    int len = wvsprintfA(line, fmt, ap);
+    va_end(ap);
+
+    HANDLE h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return;
+    DWORD wrote = 0;
+    WriteFile(h, line, len, &wrote, NULL);
+    WriteFile(h, "\r\n", 2, &wrote, NULL);
+    CloseHandle(h);
+}
+
+static void InstallAlternatingSpeed(const SpeedProfile *s);
+
+static void InstallCampaignSpeed()
+{
+    char exe[MAX_PATH];
+    GetModuleFileNameA(NULL, exe, sizeof(exe));
+    SpeedLog("attach exe=%s base=%X dbg=%d", exe, (DWORD)GetModuleHandleA(NULL),
+             IsDebuggerPresent());
+
+    const GameProfile *g = DetectGame();
+    if (!g)
+    {
+        SpeedLog("  DetectGame failed");
+        return;
+    }
+    const SpeedProfile *s = NULL;
+    for (int i = 0; i < _countof(kSpeeds); ++i)
+        if (strcmp(kSpeeds[i].name, g->name) == 0)
+            s = &kSpeeds[i];
+    if (!s)
+    {
+        SpeedLog("  no speed profile for %s", g->name);
+        return;
+    }
+    SpeedLog("  profile=%s gameOptions=%X", s->name, s->gameOptions);
+
+    BYTE want[10];
+    want[0] = 0xC7;
+    want[1] = 0x05;
+    *(DWORD *)(want + 2) = s->gameOptions;
+    *(DWORD *)(want + 6) = 2;
+
+    for (int i = 0; i < 2; ++i)
+    {
+        if (IsBadReadPtr((const void *)s->sites[i], sizeof(want)))
+        {
+            SpeedLog("  site %X unreadable", s->sites[i]);
+            return;
+        }
+        const BYTE *p = (const BYTE *)s->sites[i];
+        SpeedLog("  site %X has %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+                 s->sites[i], p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]);
+        if (memcmp(p, want, sizeof(want)) != 0)
+        {
+            SpeedLog("  site %X signature mismatch, aborting", s->sites[i]);
+            return;
+        }
+    }
+
+    const BYTE *dp = (const BYTE *)s->delaySite;
+    if (IsBadReadPtr(dp, 5) || dp[0] != 0xB9 || *(const DWORD *)(dp + 1) != 2)
+    {
+        SpeedLog("  delay site %X unexpected, aborting", s->delaySite);
+        return;
+    }
+
+    int done = 0;
+    for (int i = 0; i < 3; ++i)
+    {
+        DWORD at = (i < 2) ? s->sites[i] + 6 : s->delaySite + 1;
+        DWORD old = 0;
+        if (!VirtualProtect((void *)at, 4, PAGE_EXECUTE_READWRITE, &old))
+        {
+            SpeedLog("  write %X VirtualProtect failed err=%d", at, GetLastError());
+            continue;
+        }
+        *(DWORD *)at = ALT_SLOW;
+        VirtualProtect((void *)at, 4, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), (void *)at, 4);
+        if (*(DWORD *)at == ALT_SLOW)
+            ++done;
+        SpeedLog("  write %X now reads %d", at, *(DWORD *)at);
+    }
+    SpeedLog("  patched %d of 3 writes", done);
+    InstallAlternatingSpeed(s);
+}
+
 static BYTE *g_stubs;
 static BYTE *g_stubEnd;
 
@@ -257,6 +399,111 @@ static bool WriteJmp(DWORD at, BYTE stolen, const void *stub)
     VirtualProtect((void *)at, stolen, old, &old);
     FlushInstructionCache(GetCurrentProcess(), (void *)at, stolen);
     return true;
+}
+
+static DWORD *g_delaySlot;
+static DWORD g_altCounter;
+static int g_step = STEP_DEFAULT;
+static bool g_prevDown[2];
+static HWND g_wnd;
+static char g_baseTitle[160];
+
+static BOOL CALLBACK FindGameWindow(HWND h, LPARAM lp)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(h) || GetWindow(h, GW_OWNER))
+        return TRUE;
+    *(HWND *)lp = h;
+    return FALSE;
+}
+
+static void ShowStep()
+{
+    if (!g_wnd || !IsWindow(g_wnd))
+    {
+        g_wnd = NULL;
+        EnumWindows(FindGameWindow, (LPARAM)&g_wnd);
+        if (!g_wnd)
+            return;
+        if (!g_baseTitle[0])
+            GetWindowTextA(g_wnd, g_baseTitle, sizeof(g_baseTitle) - 40);
+    }
+    char title[224];
+    wsprintfA(title, "%s   [ speed %s ]", g_baseTitle, kSteps[g_step].label);
+    SetWindowTextA(g_wnd, title);
+}
+
+static void PollSpeedKeys()
+{
+    const int keys[2] = {VK_OEM_4, VK_OEM_6};
+    for (int i = 0; i < 2; ++i)
+    {
+        bool down = (GetAsyncKeyState(keys[i]) & 0x8000) != 0;
+        if (down && !g_prevDown[i])
+        {
+            int next = g_step + (i ? 1 : -1);
+            if (next >= 0 && next < _countof(kSteps))
+            {
+                g_step = next;
+                g_altCounter = 0;
+                SpeedLog("  step -> %s (fast=%d slow=%d)", kSteps[g_step].label,
+                         kSteps[g_step].fastFrames, kSteps[g_step].slowFrames);
+            }
+            ShowStep();
+        }
+        g_prevDown[i] = down;
+    }
+}
+
+static void __cdecl AlternateDelay()
+{
+    PollSpeedKeys();
+
+    const SpeedStep &s = kSteps[g_step];
+    int period = s.fastFrames + s.slowFrames;
+    if (period <= 0)
+        return;
+    *g_delaySlot = (int)(g_altCounter++ % period) < s.fastFrames ? ALT_FAST : ALT_SLOW;
+}
+
+static void InstallAlternatingSpeed(const SpeedProfile *s)
+{
+    const BYTE *p = (const BYTE *)s->pacer;
+    BYTE want[6];
+    want[0] = 0x8B;
+    want[1] = 0x0D;
+    *(DWORD *)(want + 2) = s->delaySlot - 8;
+
+    if (IsBadReadPtr(p, 6) || memcmp(p, want, sizeof(want)) != 0)
+    {
+        SpeedLog("  pacer %X unexpected: %02X %02X %02X %02X %02X %02X", s->pacer, p[0], p[1],
+                 p[2], p[3], p[4], p[5]);
+        return;
+    }
+
+    if (!g_stubs)
+    {
+        g_stubs = (BYTE *)VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!g_stubs)
+            return;
+        g_stubEnd = g_stubs;
+    }
+
+    g_delaySlot = (DWORD *)s->delaySlot;
+
+    BYTE *stub = g_stubEnd;
+    EmitByte(0x60);
+    EmitByte(0x9C);
+    EmitCallAbs(AlternateDelay);
+    EmitByte(0x9D);
+    EmitByte(0x61);
+    Emit(p, 6);
+    EmitJmp(s->pacer + 6);
+
+    if (WriteJmp(s->pacer, 6, stub))
+        SpeedLog("  speed keys ready, start=%s, [ slower, ] faster, hook at %X",
+                 kSteps[g_step].label, s->pacer);
 }
 
 static bool SiteLooksRight(const SelectSite &s)
@@ -311,7 +558,10 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(mod);
-        if (!HostIsGame() || IsDebuggerPresent())
+        if (!HostIsGame())
+            return TRUE;
+        InstallCampaignSpeed();
+        if (IsDebuggerPresent())
             return TRUE;
         InstallInline();
         InstallQueueBatch();
