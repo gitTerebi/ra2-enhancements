@@ -296,10 +296,31 @@ static void MeasureGameFrame(RECT *border)
         if (BorderFromLiveGame(&live))
         {
             cached = live;
-            Log("MeasureGameFrame from live game L%d T%d R%d B%d", cached.left, cached.top,
-                cached.right, cached.bottom);
+            char buf[16];
+            _snprintf(buf, sizeof(buf), "%d,%d,%d,%d", live.left, live.top, live.right,
+                      live.bottom);
+            WritePrivateProfileStringA("ddraw", "ra2video_border", buf, g_ini);
+            Log("MeasureGameFrame from live game L%d T%d R%d B%d (cached to ini)", cached.left,
+                cached.top, cached.right, cached.bottom);
             *border = cached;
             return;
+        }
+
+        char saved[32] = {};
+        GetPrivateProfileStringA("ddraw", "ra2video_border", "", saved, sizeof(saved), g_ini);
+        if (saved[0])
+        {
+            int l = 0, t = 0, r = 0, b = 0;
+            if (sscanf(saved, "%d,%d,%d,%d", &l, &t, &r, &b) == 4 && t > 0)
+            {
+                cached.left = l;
+                cached.top = t;
+                cached.right = r;
+                cached.bottom = b;
+                Log("MeasureGameFrame from ini cache L%d T%d R%d B%d", l, t, r, b);
+                *border = cached;
+                return;
+            }
         }
 
         DWORD style = (GAME_WINDOW_STYLE & ~WS_VISIBLE) & ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
