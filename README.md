@@ -13,12 +13,8 @@ game exe.
   the arrow keys and edge scroll you already have. Ctrl and Alt are ignored so hotkeys
   still work. **Fully optional: it is a separate DLL, so leave it out and you do not
   get it.**
-- **Engine fixes** (`RA2Enhancements.dll`, optional): small bug fixes for the stock
-  engine. Currently one: select-all-of-type (T, whole map) and select-all-combatants (Q)
-  call `Select()` on every matching unit without clearing the engine's `AllowVoice`
-  flag, so every unit shouts its select line at once and the mix clips. Team select and
-  band-box already clear the flag after the first unit; this does the same for those
-  two commands. Works on both `game.exe` and `gamemd.exe`.
+Pairs with [ra2-enhancements](https://github.com/gitTerebi/ra2-enhancements), engine fixes
+and game speed keys in a DLL this `dsound.dll` loads the same way. It used to live here.
 
 Pairs with [cnc-ddraw-ra2](https://github.com/gitTerebi/cnc-ddraw-ra2), a renderer fork
 whose `fixchilds=5` keeps the RA2 menus clickable while the game is upscaled. It also
@@ -40,8 +36,11 @@ feature DLLs you want next to it.
 | --- | --- |
 | Cursor | `dsound.dll` + `HWCursor.dll` |
 | WASD | `dsound.dll` + `WasdScroll.dll` |
-| Fixes | `dsound.dll` + `RA2Enhancements.dll` |
-| All | `dsound.dll` + `HWCursor.dll` + `WasdScroll.dll` + `RA2Enhancements.dll` |
+| Both | `dsound.dll` + `HWCursor.dll` + `WasdScroll.dll` |
+
+`dsound.dll` also loads `RA2Enhancements.dll` from
+[ra2-enhancements](https://github.com/gitTerebi/ra2-enhancements) if you drop that in
+beside it.
 
 The game statically imports DirectSound, so Windows loads our `dsound.dll` from the game
 folder before the first instruction runs. It forwards all 12 exports to the real
@@ -55,7 +54,6 @@ on vanilla.
 | --- | --- |
 | Cursor | `HWCursor.dll` + `HWCursor.dll.inj` |
 | WASD | `WasdScroll.dll` + `WasdScroll.dll.inj` |
-| Fixes | `RA2Enhancements.dll` + `RA2Enhancements.dll.inj` |
 
 Any pair works on its own. The `.inj` files carry `gamemd.exe` addresses only. Syringe scans `*.dll` in the game folder and picks up the
 matching `.inj` on the next launch. `syringe.log` will name whichever loaded.
@@ -89,7 +87,7 @@ Needs the VS 2022 x86 toolset.
 build.cmd
 ```
 
-Outputs `HWCursor.dll`, `WasdScroll.dll`, `RA2Enhancements.dll` and `dsound.dll` into `_dist\` and copies them
+Outputs `HWCursor.dll`, `WasdScroll.dll` and `dsound.dll` into `_dist\` and copies them
 into the game folder above the repo.
 
 ## Source layout
@@ -99,7 +97,6 @@ into the game folder above the repo.
 | `src/gameprofile.h` | game detection and the per-exe address tables both feature DLLs need |
 | `src/hwcursor.cpp` | `HWCursor.dll` — SHP frame to `HCURSOR`, palette conversion, cache |
 | `src/wasd.cpp` | `WasdScroll.dll` — inline hook on the scroll tick, plus a key-synth fallback |
-| `src/ra2enhancements.cpp` | `RA2Enhancements.dll`: per-exe site table, inline stubs for the vanilla path, Syringe exports for the `.inj` |
 | `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
 | `src/dsoundforward.h` | the 12 DirectSound export thunks |
 
