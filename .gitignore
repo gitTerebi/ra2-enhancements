@@ -1,0 +1,17 @@
+bin/
+build/
+_dist/
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.dll
+*.exe
+*.png
+*.log
+__pycache__/
+tools/
+NOTES.md
+HANDOVER.md
+*.zip
