@@ -238,22 +238,22 @@ enum { ALT_FAST = 1, ALT_SLOW = 2 };
 
 struct SpeedStep
 {
-    int fastFrames;
-    int slowFrames;
+    int fps;
     const char *label;
 };
 
+// RA2 paces frames in whole 60Hz ticks: OpenTS mainloop.cpp:295 and mainloop.cpp:610
 static const SpeedStep kSteps[] = {
-    {0, 1, "1.00x (stock)"},
-    {1, 3, "1.14x"},
-    {1, 2, "1.20x"},
-    {1, 1, "1.33x"},
-    {2, 1, "1.50x"},
-    {3, 1, "1.60x"},
-    {1, 0, "2.00x (max)"},
+    {30, "1.00x  30fps"},
+    {35, "1.17x  35fps"},
+    {40, "1.33x  40fps"},
+    {45, "1.50x  45fps"},
+    {48, "1.60x  48fps"},
+    {50, "1.67x  50fps"},
+    {60, "2.00x  60fps"},
 };
 
-enum { STEP_DEFAULT = 4 };
+enum { STEP_DEFAULT = 3 };
 
 static const char kIniSection[] = "RA2Enhancements";
 static const char kIniKey[] = "GameSpeedStep";
@@ -440,7 +440,6 @@ static bool WriteJmp(DWORD at, BYTE stolen, const void *stub)
 }
 
 static DWORD *g_delaySlot;
-static DWORD g_altCounter;
 static bool g_prevDown[2];
 static HWND g_wnd;
 static char g_baseTitle[160];
@@ -483,10 +482,8 @@ static void PollSpeedKeys()
             if (next >= 0 && next < _countof(kSteps))
             {
                 g_step = next;
-                g_altCounter = 0;
                 SaveStep();
-                SpeedLog("  step -> %s (fast=%d slow=%d)", kSteps[g_step].label,
-                         kSteps[g_step].fastFrames, kSteps[g_step].slowFrames);
+                SpeedLog("  step -> %s (%d fps)", kSteps[g_step].label, kSteps[g_step].fps);
             }
             ShowStep();
         }
@@ -494,15 +491,116 @@ static void PollSpeedKeys()
     }
 }
 
+static LONGLONG g_qpcFreq;
+static LONGLONG g_nextFrame;
+static HANDLE g_paceTimer;
+static int g_pacedStep = -1;
+static LONGLONG g_nextCameraFrame;
+typedef void (__cdecl *RenderScrollFrameFn)();
+static RenderScrollFrameFn g_renderScrollFrame;
+
+static void FindScrollRenderer()
+{
+    if (g_renderScrollFrame)
+        return;
+    HMODULE scroll = GetModuleHandleA("WasdScroll.dll");
+    if (scroll)
+        g_renderScrollFrame = (RenderScrollFrameFn)GetProcAddress(scroll, "RenderScrollFrame");
+}
+
+static void PaceFrame(int fps)
+{
+    if (fps <= 0)
+        return;
+
+    if (!g_qpcFreq)
+    {
+        LARGE_INTEGER f;
+        if (!QueryPerformanceFrequency(&f))
+            return;
+        g_qpcFreq = f.QuadPart;
+
+        HANDLE(WINAPI * createTimerExW)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD) =
+            (HANDLE(WINAPI *)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD))GetProcAddress(
+                GetModuleHandleA("kernel32.dll"), "CreateWaitableTimerExW");
+        if (createTimerExW)
+            g_paceTimer = createTimerExW(NULL, NULL, 0x00000002 | 0x00000001, TIMER_ALL_ACCESS);
+        if (!g_paceTimer)
+            g_paceTimer = CreateWaitableTimerA(NULL, TRUE, NULL);
+    }
+
+    const LONGLONG period = g_qpcFreq / fps;
+
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+
+    if (g_pacedStep != g_step || g_nextFrame == 0 ||
+        now.QuadPart - g_nextFrame > period || g_nextFrame - now.QuadPart > period * 4)
+    {
+        g_pacedStep = g_step;
+        g_nextFrame = now.QuadPart + period;
+        return;
+    }
+
+    FindScrollRenderer();
+    const LONGLONG cameraPeriod = g_qpcFreq / 240;
+    if (!g_nextCameraFrame || now.QuadPart - g_nextCameraFrame > cameraPeriod)
+        g_nextCameraFrame = now.QuadPart;
+
+    while (now.QuadPart < g_nextFrame)
+    {
+        if (g_renderScrollFrame && now.QuadPart >= g_nextCameraFrame)
+        {
+            g_renderScrollFrame();
+            QueryPerformanceCounter(&now);
+            g_nextCameraFrame += cameraPeriod;
+            // An expensive draw must not cause a burst of catch-up draws.
+            if (g_nextCameraFrame <= now.QuadPart)
+                g_nextCameraFrame = now.QuadPart + cameraPeriod;
+            if (now.QuadPart >= g_nextFrame)
+                break;
+        }
+        LONGLONG wake = g_nextFrame;
+        if (g_renderScrollFrame && g_nextCameraFrame < wake)
+            wake = g_nextCameraFrame;
+        LONGLONG remain = wake - now.QuadPart;
+        LONGLONG spin = g_qpcFreq / 2000;
+        if (g_paceTimer && remain > spin)
+        {
+            LARGE_INTEGER due;
+            due.QuadPart = -((remain - spin) * 10000000 / g_qpcFreq);
+            if (SetWaitableTimer(g_paceTimer, &due, 0, NULL, NULL, FALSE))
+                WaitForSingleObject(g_paceTimer, INFINITE);
+        }
+        while (QueryPerformanceCounter(&now), now.QuadPart < wake)
+            YieldProcessor();
+    }
+
+    g_nextFrame += period;
+}
+
 static void __cdecl AlternateDelay()
 {
     PollSpeedKeys();
 
-    const SpeedStep &s = kSteps[g_step];
-    int period = s.fastFrames + s.slowFrames;
-    if (period <= 0)
-        return;
-    *g_delaySlot = (int)(g_altCounter++ % period) < s.fastFrames ? ALT_FAST : ALT_SLOW;
+    *g_delaySlot = ALT_FAST;
+    PaceFrame(kSteps[g_step].fps);
+}
+
+static __declspec(naked) void AlternateDelayPreserveFP()
+{
+    __asm {
+        push ebp
+        mov ebp, esp
+        sub esp, 528
+        and esp, -16
+        fxsave [esp]
+        call AlternateDelay
+        fxrstor [esp]
+        mov esp, ebp
+        pop ebp
+        ret
+    }
 }
 
 static void InstallAlternatingSpeed(const SpeedProfile *s)
@@ -533,7 +631,7 @@ static void InstallAlternatingSpeed(const SpeedProfile *s)
     BYTE *stub = g_stubEnd;
     EmitByte(0x60);
     EmitByte(0x9C);
-    EmitCallAbs(AlternateDelay);
+    EmitCallAbs(AlternateDelayPreserveFP);
     EmitByte(0x9D);
     EmitByte(0x61);
     Emit(p, 6);

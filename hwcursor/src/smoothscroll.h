@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <stdlib.h>
+#include "scrollspeed.h"
 
 namespace SmoothScroll
 {
@@ -10,12 +11,11 @@ namespace SmoothScroll
     static const int kPosX = 0xD64;
     static const int kPosY = 0xD68;
 
-    static const double kSpeed = 1500.0;
-
     static double g_freq;
     static LONGLONG g_last;
     static double g_ax, g_ay;
     static double g_dt;
+    static bool g_moved;
 
     inline bool Available(DWORD setPos)
     {
@@ -26,6 +26,7 @@ namespace SmoothScroll
 
     inline bool Tick(DWORD instance, DWORD setPos)
     {
+        g_moved = false;
         if (!Available(setPos))
             return false;
 
@@ -48,7 +49,8 @@ namespace SmoothScroll
         if (dt > 0.05)
             dt = 0.05;
 
-        g_dt = g_dt == 0.0 ? dt : g_dt * 0.85 + dt * 0.15;
+        // Raw dt, matching Vinifera scrollext_hooks.cpp:223 and OpenTS scroll.cpp:546
+        g_dt = dt;
 
         DWORD pid = 0;
         GetWindowThreadProcessId(GetForegroundWindow(), &pid);
@@ -71,7 +73,7 @@ namespace SmoothScroll
             return true;
         }
 
-        double step = kSpeed * g_dt;
+        double step = ScrollSpeed::PixelsPerSecond() * g_dt;
         if (dx && dy)
             step *= 0.70710678;
 
@@ -90,6 +92,7 @@ namespace SmoothScroll
         pos[0] = *(int *)((BYTE *)tac + kPosX) + mx;
         pos[1] = *(int *)((BYTE *)tac + kPosY) + my;
         ((SetTacticalPos_t)setPos)(tac, NULL, pos);
+        g_moved = true;
         return true;
     }
 }

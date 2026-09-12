@@ -2,11 +2,34 @@
 #include "gameprofile.h"
 #include "wasdscroll.h"
 #include "smoothscroll.h"
+#include "rightscroll.h"
 
 static const GameProfile *g_game;
 static bool g_scrollHooked;
-static DWORD g_scrollFlag;
 static DWORD g_scrollResume;
+static bool g_rendering;
+
+// Called on the game thread by RA2Enhancements while its simulation timer waits.
+// Do not dispatch Map input here: that can consume commands or open modal dialogs.
+extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
+{
+    if (!g_scrollHooked || g_rendering || !g_game)
+        return;
+    g_rendering = true;
+    SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
+    bool rightMoved = RightScroll::Tick(g_game->mapInstance, g_game->tacticalInstance);
+    if (SmoothScroll::g_moved || rightMoved)
+    {
+        void *tactical = *(void **)g_game->tacticalInstance;
+        void *map = (void *)g_game->mapInstance;
+        typedef void (__thiscall *Method)(void *);
+        // Original idle-render sequence at RA2 540A61 / YR 55E261.
+        (*(Method **)tactical)[0x5C / 4](tactical);
+        // GScreenClass::DrawOnTop renders layers and presents the complete scene.
+        (*(Method **)map)[0x3C / 4](map);
+    }
+    g_rendering = false;
+}
 
 static const GameProfile *Game()
 {
@@ -15,10 +38,10 @@ static const GameProfile *Game()
     return g_game;
 }
 
-extern "C" __declspec(noinline) void __cdecl ScrollTickC()
+extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map)
 {
     const GameProfile *g = Game();
-    if (g)
+    if (g && map == (void *)g->mapInstance)
         SmoothScroll::Tick(g->tacticalInstance, g->setTacticalPos);
 }
 
@@ -27,13 +50,23 @@ static __declspec(naked) void ScrollStub()
     __asm {
         pushad
         pushfd
+        // The tick uses floating point. Preserve the caller's x87/SSE state too.
+        mov ebp, esp
+        sub esp, 528
+        and esp, -16
+        fxsave [esp]
+        push ecx
         call ScrollTickC
+        add esp, 4
+        fxrstor [esp]
+        mov esp, ebp
         popfd
         popad
-        mov eax, g_scrollFlag
-        mov al, byte ptr [eax]
-        push g_scrollResume
-        ret
+        // Replay the five displaced bytes of GetInputAndUpdate.
+        sub esp, 8
+        push ebp
+        push esi
+        jmp dword ptr [g_scrollResume]
     }
 }
 
@@ -42,12 +75,13 @@ static void InstallScrollHook()
     const GameProfile *g = Game();
     if (!g || !g->scrollHook)
         return;
-    if (*(const BYTE *)g->scrollHook != 0xA0)
+    static const BYTE signature[] = {0x83, 0xEC, 0x08, 0x55, 0x56, 0x57, 0x8B, 0xF9};
+    if (IsBadReadPtr((const void *)g->scrollHook, sizeof(signature)) ||
+        memcmp((const void *)g->scrollHook, signature, sizeof(signature)) != 0)
         return;
     if (!SmoothScroll::Available(g->setTacticalPos))
         return;
 
-    g_scrollFlag = *(DWORD *)(g->scrollHook + 1);
     g_scrollResume = g->scrollHook + 5;
 
     BYTE patch[5];
@@ -69,9 +103,7 @@ static DWORD WINAPI TickThread(LPVOID)
     {
         if (!g_scrollHooked)
         {
-            InstallScrollHook();
-            if (!g_scrollHooked)
-                WasdScroll::Tick();
+            WasdScroll::Tick();
         }
         Sleep(2);
     }
@@ -79,10 +111,7 @@ static DWORD WINAPI TickThread(LPVOID)
 
 EXPORT_FUNC(Tactical_WasdTick)
 {
-    if (!g_scrollHooked)
-        InstallScrollHook();
-    if (!g_scrollHooked)
-        WasdScroll::Tick();
+    // The worker owns fallback key state; do not race it from a render hook.
     return 0;
 }
 
@@ -93,7 +122,17 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         DisableThreadLibraryCalls(mod);
         if (!HostIsGame())
             return TRUE;
-        CloseHandle(CreateThread(NULL, 0, TickThread, NULL, 0, NULL));
+        // Install while the loading thread is stopped, before gameplay starts.
+        // Never rewrite executable instructions from the polling worker.
+        InstallScrollHook();
+        if (g_scrollHooked)
+        {
+            ScrollSpeed::g_rate = (const int *)(strcmp(g_game->name, "gamemd") == 0 ?
+                                               0xA8EB70 : 0xA40B24);
+            RightScroll::Install(strcmp(g_game->name, "gamemd") == 0);
+        }
+        if (!g_scrollHooked)
+            CloseHandle(CreateThread(NULL, 0, TickThread, NULL, 0, NULL));
     }
     return TRUE;
 }

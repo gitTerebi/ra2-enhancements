@@ -8,4 +8,4 @@ for %%P in (hwcursor ra2enhancements ra2video) do (
 )
 
 echo.
-echo All three built. Each folder has its output in %%P\_dist and in the game folder.
+echo All three built. Each folder has its output in its own _dist and in the game folder.

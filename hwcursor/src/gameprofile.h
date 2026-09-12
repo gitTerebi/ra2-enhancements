@@ -43,6 +43,7 @@ struct GameProfile
     DWORD tacticalInstance;
     DWORD setTacticalPos;
     DWORD scrollHook;
+    DWORD mapInstance;
 };
 
 static const BYTE kSigYR[5] = {0x8B, 0x48, 0x04, 0x85, 0xC9};
@@ -53,10 +54,10 @@ static const BYTE kDetectRA2[7] = {0x5B, 0x83, 0xC4, 0x48, 0xC2, 0x0C, 0x00};
 static const GameProfile kProfiles[] = {
     {"gamemd", 0x007B93F9, kSigYR, 0x007B9528, kDetectYR, sizeof(kDetectYR),
      (ConvertClass **)0x0087F6C8, (BYTE **)0x00B78164, (GetFramePixels_t)0x0069E740, false,
-     0x00887324, 0x006D6000, 0x006D2540},
+     0x00887324, 0x006D6000, 0x004F4320, 0x0087F7E8},
     {"game", 0x00772746, kSigRA2, 0x00772893, kDetectRA2, sizeof(kDetectRA2),
      (ConvertClass **)0x008323C8, (BYTE **)0x00B2AF5C, NULL, true,
-     0x0083996C, 0x006A6640, 0x006A2DD0},
+     0x0083996C, 0x006A6640, 0x004E09D0, 0x008324E0},
 };
 
 // Syringe.exe 0.7.3.0 also images at 0x00400000 and LoadLibrary/FreeLibrary's our DLLs to resolve .inj exports

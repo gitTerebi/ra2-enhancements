@@ -4,9 +4,9 @@ Engine fixes and a game speed control for **Command & Conquer: Red Alert 2**, **
 Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
 
 - **Game speed keys.** `[` slows the game down a step, `]` speeds it up. Seven steps run
-  from 1.00x (stock) to 2.00x. The window title shows the current step. The campaign and
-  skirmish both run at the game's own speed cap; this raises it by alternating fast and
-  slow frames inside the engine's pacer.
+  from 30fps (stock) to 60fps. The window title shows the current step. RA2 paces frames in
+  whole 60Hz ticks, so its own speeds are only 60, 30, 20, 15, 12 and 10fps; this holds each
+  frame to an exact target length instead, which is how it reaches rates in between.
 - **Speed is remembered.** The DLL writes the chosen step to the game's own ini under
   `[RA2Enhancements] GameSpeedStep`, and reads it back on the next launch. Each game keeps
   its own value: `game.exe` uses `RA2.ini`, `gamemd.exe` uses `RA2MD.ini`, and Mental Omega
@@ -55,18 +55,24 @@ Delete `RA2Enhancements.dll`. Nothing else depends on it.
 
 ## Speed steps
 
-| Step | Speed | Frames |
-| --- | --- | --- |
-| 0 | 1.00x (stock) | 0 fast, 1 slow |
-| 1 | 1.14x | 1 fast, 3 slow |
-| 2 | 1.20x | 1 fast, 2 slow |
-| 3 | 1.33x | 1 fast, 1 slow |
-| 4 | 1.50x (default) | 2 fast, 1 slow |
-| 5 | 1.60x | 3 fast, 1 slow |
-| 6 | 2.00x (max) | 1 fast, 0 slow |
+| Step | Speed | Frame rate | Frame length |
+| --- | --- | --- | --- |
+| 0 | 1.00x (stock) | 30fps | 33.33ms |
+| 1 | 1.17x | 35fps | 28.57ms |
+| 2 | 1.33x | 40fps | 25.00ms |
+| 3 | 1.50x (default) | 45fps | 22.22ms |
+| 4 | 1.60x | 48fps | 20.83ms |
+| 5 | 1.67x | 50fps | 20.00ms |
+| 6 | 2.00x (max) | 60fps | 16.67ms |
 
-You can set `GameSpeedStep` by hand in the ini. The DLL falls back to 4 for an
+You can set `GameSpeedStep` by hand in the ini. The DLL falls back to 3 for an
 out-of-range value.
+
+Every step holds one frame length, so the motion stays even. An earlier version faked the
+in-between rates by alternating 16.67ms and 33.33ms frames, which gave the right average
+fps but juddered badly, because the apparent speed of anything moving swung by 2:1 from
+frame to frame. Measured on `game.exe`, scroll speed varied 37.8% under the alternating
+scheme and 3.2% once each frame was held to 22.22ms.
 
 **Multiplayer:** the speed keys change how fast the local client paces frames. They do not
 touch game logic, units, or the network protocol, but the RA2 netcode does not expect a

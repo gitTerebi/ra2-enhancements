@@ -80,6 +80,26 @@ protocol.
 
 ## Build
 
+WASD camera movement now runs at entry to `GScreenClass::GetInputAndUpdate`,
+before its input/update work, using elapsed time and fractional-pixel accumulation.
+The hook validates the function signature and preserves CPU and floating-point
+state. It is installed during DLL loading; if validation fails, a worker uses
+the arrow-key fallback. The exported Syringe tick remains for loader compatibility.
+With `RA2Enhancements.dll` installed, the simulation limiter also calls
+`RenderScrollFrame` during its wait, targeting 240 camera updates per second while
+WASD or a right-button drag moves the map. Each update uses the game's idle-render sequence, without
+dispatching gameplay input or advancing the simulation. Actual redraw rate depends
+on rendering cost. Right-button scrolling reuses the native drag threshold, capture,
+cursor and scroll settings. WASD and continuous right-drag scrolling share the
+in-game Scroll Rate slider: slowest to fastest is 600, 900, 1200, 1500, 1800,
+2100 and 2400 pixels/second. The middle position is 1500 pixels/second, with
+diagonal movement normalized to the same speed. Changes apply immediately.
+Pointer-relative drag modes use the same curve for sensitivity while retaining
+distance-based movement.
+Arrow-key and edge scrolling retain their existing behavior.
+Build and startup checks passed; terrain/unit alignment and sustained redraw rate
+still need an in-game check. See [address evidence](../RA2-MAP-ADDRESS.md).
+
 Needs the VS 2022 x86 toolset.
 
 ```
@@ -99,9 +119,8 @@ into the game folder three levels above this folder.
 | `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
 | `src/dsoundforward.h` | the 12 DirectSound export thunks |
 
-Each feature DLL patches the game itself when loaded by the proxy, and stands down under
-Syringe (`IsDebuggerPresent`) so the `.inj` hooks are the only ones applied. That is what
-lets one binary serve both load paths.
+The cursor DLL uses the `.inj` hooks under Syringe. The WASD DLL installs its
+validated input/update hook during loading for either loader.
 
 The hardcoded addresses live in one table in `src/gameprofile.h`, one row per exe. Each
 DLL confirms the exe by matching bytes at an address nothing else patches, never at a
