@@ -217,6 +217,184 @@ static void InstallQueueBatch()
     }
 }
 
+enum { ACT_NONE = 0, ACT_MOVE = 1, ACT_NOMOVE = 2, ACT_HEALER_GUARD = 0x3B };
+enum { ABSFLAG_FOOT = 0x04 };
+enum { MISSION_AREA_GUARD = 11 };
+enum { RTTI_UNIT = 1, RTTI_INFANTRY = 0x0F };
+enum { VT_WHATAMI = 0x2C, VT_GETCOORDS = 0x48 };
+
+typedef int (__thiscall *CombatDamageFn)(void *techno, int weaponIndex);
+typedef bool (__thiscall *AssignMissionFn)(void *foot, int mission, void *target, void *dest,
+                                           int unused);
+typedef int (__thiscall *WhatAmIFn)(void *obj);
+typedef int *(__thiscall *GetCoordsFn)(void *obj, int *out);
+
+struct HealerProfile
+{
+    const char *name;
+    DWORD clickSite;
+    DWORD clickSlot;
+    DWORD combatDamage;
+    DWORD assignMissionSlot;
+    DWORD deactivatedOffset;
+    void ***selectedItems;
+    int *selectedCount;
+};
+
+static const HealerProfile kHealers[] = {
+    {"gamemd", 0x004AE844, 0x144, 0x006F3970, 0x378, 0x298, (void ***)0x00A8ECBC,
+     (int *)0x00A8ECC8},
+    {"game", 0x0049E964, 0x138, 0x006C16F0, 0x320, 0, (void ***)0x00A40C64, (int *)0x00A40C70},
+};
+
+static const BYTE kCombatDamageSig[16] = {0x53, 0x8B, 0x5C, 0x24, 0x08, 0x56, 0x57, 0x33,
+                                          0xFF, 0x83, 0xFB, 0xFF, 0x8B, 0xF1, 0x0F, 0x85};
+
+static const HealerProfile *g_healer;
+static DWORD g_healerSlot;
+static DWORD g_healerResume;
+
+static void SpeedLog(const char *fmt, ...);
+
+static bool IsGroundFoot(void *obj)
+{
+    if (!obj || !(*((const BYTE *)obj + 0x14) & ABSFLAG_FOOT))
+        return false;
+    int rtti = (*(WhatAmIFn **)obj)[VT_WHATAMI / 4](obj);
+    return rtti == RTTI_UNIT || rtti == RTTI_INFANTRY;
+}
+
+static void *NearestArmedSelected(void *healer)
+{
+    int here[3], there[3];
+    (*(GetCoordsFn **)healer)[VT_GETCOORDS / 4](healer, here);
+
+    void *best = NULL;
+    double bestDist = 0;
+    void **items = *g_healer->selectedItems;
+    int count = *g_healer->selectedCount;
+    for (int i = 0; i < count; ++i)
+    {
+        void *other = items[i];
+        if (other == healer || !IsGroundFoot(other) ||
+            ((CombatDamageFn)g_healer->combatDamage)(other, -1) <= 0)
+            continue;
+        (*(GetCoordsFn **)other)[VT_GETCOORDS / 4](other, there);
+        double dx = there[0] - here[0], dy = there[1] - here[1];
+        double dist = dx * dx + dy * dy;
+        if (!best || dist < bestDist)
+        {
+            best = other;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
+static bool __cdecl HealerEscorts(void *obj, int action)
+{
+    if (action != ACT_NONE && action != ACT_MOVE && action != ACT_NOMOVE &&
+        action != ACT_HEALER_GUARD)
+        return false;
+    if (!IsGroundFoot(obj) || ((CombatDamageFn)g_healer->combatDamage)(obj, -1) >= 0)
+        return false;
+    DWORD off = g_healer->deactivatedOffset;
+    if (off && *((const BYTE *)obj + off))
+        return true;
+    void *escort = NearestArmedSelected(obj);
+    AssignMissionFn assign = (*(AssignMissionFn **)obj)[g_healer->assignMissionSlot / 4];
+    assign(obj, MISSION_AREA_GUARD, escort ? escort : obj, NULL, 0);
+    return true;
+}
+
+static __declspec(naked) void HealerClickedAction()
+{
+    __asm {
+        push ecx
+        push edx
+        mov eax, [esp + 0x0C]
+        push eax
+        push ecx
+        call HealerEscorts
+        add esp, 8
+        pop edx
+        pop ecx
+        test al, al
+        jnz escorted
+        mov eax, g_healerSlot
+        jmp dword ptr [edx + eax]
+    escorted:
+        mov eax, 1
+        ret 0x0C
+    }
+}
+
+static __declspec(naked) void HealerClickedActionSyringe()
+{
+    __asm {
+        call HealerClickedAction
+        jmp dword ptr [g_healerResume]
+    }
+}
+
+static const HealerProfile *FindHealerProfile()
+{
+    const GameProfile *g = DetectGame();
+    if (!g)
+        return NULL;
+    for (int i = 0; i < _countof(kHealers); ++i)
+        if (strcmp(kHealers[i].name, g->name) == 0)
+            return &kHealers[i];
+    return NULL;
+}
+
+static bool UseHealerProfile(const HealerProfile *h)
+{
+    if (!h || IsBadReadPtr((const void *)h->combatDamage, sizeof(kCombatDamageSig)) ||
+        memcmp((const void *)h->combatDamage, kCombatDamageSig, sizeof(kCombatDamageSig)) != 0)
+        return false;
+    g_healer = h;
+    g_healerSlot = h->clickSlot;
+    g_healerResume = h->clickSite + 6;
+    return true;
+}
+
+EXPORT_FUNC(HealerEscort_ClickedAction)
+{
+    const HealerProfile *h = FindHealerProfile();
+    if (!h || h->clickSite != R->origin || !UseHealerProfile(h))
+        return 0;
+    return (DWORD)HealerClickedActionSyringe;
+}
+
+static void InstallHealerEscort()
+{
+    const HealerProfile *h = FindHealerProfile();
+    if (!h)
+        return;
+    BYTE want[6] = {0xFF, 0x92};
+    *(DWORD *)(want + 2) = h->clickSlot;
+    if (IsBadReadPtr((const void *)h->clickSite, 6) ||
+        memcmp((const void *)h->clickSite, want, sizeof(want)) != 0 || !UseHealerProfile(h))
+    {
+        SpeedLog("  healer escort: site %X unexpected, skipped", h->clickSite);
+        return;
+    }
+
+    BYTE patch[6];
+    patch[0] = 0xE8;
+    *(DWORD *)(patch + 1) = (DWORD)HealerClickedAction - (h->clickSite + 5);
+    patch[5] = 0x90;
+
+    DWORD old = 0;
+    if (!VirtualProtect((void *)h->clickSite, 6, PAGE_EXECUTE_READWRITE, &old))
+        return;
+    memcpy((void *)h->clickSite, patch, 6);
+    VirtualProtect((void *)h->clickSite, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), (void *)h->clickSite, 6);
+    SpeedLog("  healer escort ready at %X", h->clickSite);
+}
+
 struct SpeedProfile
 {
     const char *name;
@@ -737,6 +915,7 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         if (IsDebuggerPresent())
             return TRUE;
         InstallInline();
+        InstallHealerEscort();
         InstallQueueBatch();
     }
     return TRUE;

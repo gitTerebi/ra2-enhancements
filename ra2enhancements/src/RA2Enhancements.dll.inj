@@ -10,3 +10,9 @@
 732B4C = TypeSelect_LoopDone, 5
 7324A0 = CombatantSelect_SelectOne, A
 7324AF = CombatantSelect_LoopDone, 5
+;
+; Healers (negative CombatDamage) whose own action on the clicked target is
+; None/Move/NoMove/0x3B get Area Guard on the nearest selected armed unit
+; instead of ClickedAction, so a Repair IFV escorts the group rather than
+; driving at the enemy.
+4AE844 = HealerEscort_ClickedAction, 6
