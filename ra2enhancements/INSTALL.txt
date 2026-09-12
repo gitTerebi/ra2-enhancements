@@ -1,0 +1,67 @@
+RA2Enhancements
+===============
+https://github.com/gitTerebi/ra2-enhancements
+
+Engine fixes and a game speed control, one DLL. Copy it into your game
+folder (the one with gamemd.exe / game.exe in it).
+
+  Game speed keys  [ slows the game a step, ] speeds it up. Seven steps,
+                   1.00x (stock) up to 2.00x. The window title shows the
+                   step. The DLL saves the step to the game's own ini and
+                   reads it back next launch, so each game keeps its own
+                   speed: game.exe uses RA2.ini, gamemd.exe uses RA2MD.ini,
+                   Mental Omega uses RA2MO.ini. The key is
+                   [RA2Enhancements] GameSpeedStep.
+
+  Select-all voice select-all-of-type (T) and select-all-combatants (Q) no
+                   longer make every unit shout its select line at once.
+                   One unit answers, like band-box and team select already
+                   do.
+
+  Shift queue      shift-click a sidebar cameo to queue 5 of that unit,
+                   shift right-click to remove 5.
+
+
+Vanilla Red Alert 2 / Yuri's Revenge
+------------------------------------
+  RA2Enhancements.dll  from here
+  dsound.dll           from ra2-hwcursor-wasd, it is the loader
+
+The game imports DirectSound statically, so Windows loads dsound.dll from
+the game folder before the first instruction runs. That proxy forwards all
+12 exports to the real C:\Windows\SysWOW64\dsound.dll, so audio is
+untouched, then loads this DLL beside it. No launcher, no renaming.
+
+
+Mental Omega (and anything else on Syringe)
+-------------------------------------------
+  RA2Enhancements.dll + RA2Enhancements.dll.inj
+
+Syringe scans *.dll in the game folder and picks up the matching .inj on
+the next launch. syringe.log names it when it loads. You do not need
+dsound.dll here.
+
+
+Uninstall
+---------
+Delete RA2Enhancements.dll. Nothing else depends on it.
+
+
+Also worth having
+-----------------
+ra2-hwcursor-wasd adds a hardware mouse cursor and WASD map scrolling, and
+ships the dsound.dll loader:
+https://github.com/gitTerebi/ra2-hwcursor-wasd
+
+cnc-ddraw-ra2 is a renderer fork whose fixchilds=5 keeps the RA2 menus
+clickable while the game is upscaled:
+https://github.com/gitTerebi/cnc-ddraw-ra2
+
+
+Files
+-----
+RA2Enhancements.dll      engine fixes and speed keys, both load paths
+RA2Enhancements.dll.inj  Syringe hook list for the above (gamemd.exe only)
+
+32-bit only, matching the game. Built with the VS 2022 x86 toolset.
+MIT licensed. Not affiliated with or endorsed by EA.
