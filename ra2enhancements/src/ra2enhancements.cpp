@@ -59,11 +59,16 @@ static void UseProfile(const FixProfile &f)
 
 static const FixProfile *SyringeProfile()
 {
+    static bool s_done;
+    static const FixProfile *s_profile;
+    if (s_done)
+        return s_profile;
+    s_done = true;
     if (!HostIsGame())
         return NULL;
     for (int i = 0; i < _countof(kFixes); ++i)
         if (strcmp(kFixes[i].name, "gamemd") == 0)
-            return &kFixes[i];
+            return s_profile = &kFixes[i];
     return NULL;
 }
 
@@ -403,16 +408,23 @@ struct SpeedProfile
     DWORD delaySite;
     DWORD pacer;
     DWORD delaySlot;
+    DWORD gameMode;
+    DWORD netStart;
+    DWORD netDelay;
+    TimeGetTimeFn *timeGetTime;
+    DWORD netPoll;
 };
 
 // Phobos src/Misc/Hooks.Gamespeed.cpp:11 hooks 0x69BAE7 and 0x55E160; 0x55D78D is delaySite.
+// gameMode is read by the pacer itself at 55E197 / 540997; YRpp SessionClass.h:54.
 static const SpeedProfile kSpeeds[] = {
-    {"gamemd", 0x00A8EB60, {0x0055D774, 0x0069BAE7}, 0x0055D78C, 0x0055E160, 0x00887350},
-    {"game", 0x00A40B18, {0x0053FFE4, 0x00672E17}, 0x0053FFFC, 0x00540960, 0x00839998},
+    {"gamemd", 0x00A8EB60, {0x0055D774, 0x0069BAE7}, 0x0055D78C, 0x0055E160, 0x00887350, 0x00A8B238,
+     0x00887328, 0x00887330, (TimeGetTimeFn *)0x007E1530, 0x0048D080},
+    {"game", 0x00A40B18, {0x0053FFE4, 0x00672E17}, 0x0053FFFC, 0x00540960, 0x00839998, 0x00A3D298,
+     0x00839970, 0x00839978, (TimeGetTimeFn *)0x0079A524, 0x00481FB0},
 };
 
-enum { CAMPAIGN_SPEED = 1 };
-enum { ALT_FAST = 1, ALT_SLOW = 2 };
+enum { GAMEMODE_CAMPAIGN = 0, GAMEMODE_SKIRMISH = 5 };
 
 struct SpeedStep
 {
@@ -554,24 +566,6 @@ static void InstallCampaignSpeed()
         return;
     }
 
-    int done = 0;
-    for (int i = 0; i < 3; ++i)
-    {
-        DWORD at = (i < 2) ? s->sites[i] + 6 : s->delaySite + 1;
-        DWORD old = 0;
-        if (!VirtualProtect((void *)at, 4, PAGE_EXECUTE_READWRITE, &old))
-        {
-            SpeedLog("  write %X VirtualProtect failed err=%d", at, GetLastError());
-            continue;
-        }
-        *(DWORD *)at = ALT_SLOW;
-        VirtualProtect((void *)at, 4, old, &old);
-        FlushInstructionCache(GetCurrentProcess(), (void *)at, 4);
-        if (*(DWORD *)at == ALT_SLOW)
-            ++done;
-        SpeedLog("  write %X now reads %d", at, *(DWORD *)at);
-    }
-    SpeedLog("  patched %d of 3 writes", done);
     InstallAlternatingSpeed(s);
 }
 
@@ -618,6 +612,7 @@ static bool WriteJmp(DWORD at, BYTE stolen, const void *stub)
 }
 
 static DWORD *g_delaySlot;
+static const DWORD *g_gameMode;
 static bool g_prevDown[2];
 static HWND g_wnd;
 static char g_baseTitle[160];
@@ -651,9 +646,12 @@ static void ShowStep()
 static void PollSpeedKeys()
 {
     const int keys[2] = {VK_OEM_4, VK_OEM_6};
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    bool focused = pid == GetCurrentProcessId();
     for (int i = 0; i < 2; ++i)
     {
-        bool down = (GetAsyncKeyState(keys[i]) & 0x8000) != 0;
+        bool down = focused && (GetAsyncKeyState(keys[i]) & 0x8000) != 0;
         if (down && !g_prevDown[i])
         {
             int next = g_step + (i ? 1 : -1);
@@ -673,28 +671,31 @@ static LONGLONG g_qpcFreq;
 static LONGLONG g_nextFrame;
 static HANDLE g_paceTimer;
 static int g_pacedStep = -1;
-static LONGLONG g_nextCameraFrame;
 typedef void (__cdecl *RenderScrollFrameFn)();
 typedef LONGLONG (__cdecl *ScrollRenderDueFn)(LONGLONG now);
+typedef LONGLONG (__cdecl *ScrollRenderCostFn)();
 static RenderScrollFrameFn g_renderScrollFrame;
 static ScrollRenderDueFn g_scrollRenderDue;
+static ScrollRenderCostFn g_scrollRenderCost;
 
 static void FindScrollRenderer()
 {
-    if (g_renderScrollFrame)
+    static bool s_searched;
+    if (s_searched)
         return;
     HMODULE scroll = GetModuleHandleA("WasdScroll.dll");
-    if (scroll)
-    {
-        g_renderScrollFrame = (RenderScrollFrameFn)GetProcAddress(scroll, "RenderScrollFrame");
-        g_scrollRenderDue = (ScrollRenderDueFn)GetProcAddress(scroll, "ScrollRenderDue");
-    }
+    if (!scroll)
+        return;
+    s_searched = true;
+    g_renderScrollFrame = (RenderScrollFrameFn)GetProcAddress(scroll, "RenderScrollFrame");
+    g_scrollRenderDue = (ScrollRenderDueFn)GetProcAddress(scroll, "ScrollRenderDue");
+    g_scrollRenderCost = (ScrollRenderCostFn)GetProcAddress(scroll, "ScrollRenderCost");
 }
 
 static void WaitUntil(LONGLONG wake, LARGE_INTEGER &now)
 {
     LONGLONG remain = wake - now.QuadPart;
-    LONGLONG spin = g_qpcFreq / 2000;
+    LONGLONG spin = g_qpcFreq / 4000;
     if (g_paceTimer && remain > spin)
     {
         LARGE_INTEGER due;
@@ -706,26 +707,62 @@ static void WaitUntil(LONGLONG wake, LARGE_INTEGER &now)
         YieldProcessor();
 }
 
+static bool EnsureClock()
+{
+    if (g_qpcFreq)
+        return true;
+    LARGE_INTEGER f;
+    if (!QueryPerformanceFrequency(&f))
+        return false;
+    g_qpcFreq = f.QuadPart;
+
+    HANDLE(WINAPI * createTimerExW)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD) =
+        (HANDLE(WINAPI *)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD))GetProcAddress(
+            GetModuleHandleA("kernel32.dll"), "CreateWaitableTimerExW");
+    if (createTimerExW)
+        g_paceTimer = createTimerExW(NULL, NULL, 0x00000002 | 0x00000001, TIMER_ALL_ACCESS);
+    if (!g_paceTimer)
+        g_paceTimer = CreateWaitableTimerA(NULL, TRUE, NULL);
+    return true;
+}
+
+typedef void (__cdecl *PollFn)();
+
+static void ScrollDrawsUntil(LONGLONG deadline, LARGE_INTEGER &now, PollFn poll)
+{
+    FindScrollRenderer();
+    const LONGLONG instant = g_qpcFreq / 10000;
+    bool stalled = false;
+    while (now.QuadPart < deadline)
+    {
+        if (poll)
+        {
+            poll();
+            QueryPerformanceCounter(&now);
+            if (now.QuadPart >= deadline)
+                break;
+        }
+        LONGLONG due = g_renderScrollFrame && g_scrollRenderDue ? g_scrollRenderDue(now.QuadPart) : MAXLONGLONG;
+        LONGLONG cost = g_scrollRenderCost ? g_scrollRenderCost() : 0;
+        if (due <= now.QuadPart && !stalled && now.QuadPart < deadline - cost)
+        {
+            LONGLONG before = now.QuadPart;
+            g_renderScrollFrame();
+            QueryPerformanceCounter(&now);
+            stalled = now.QuadPart - before < instant && g_scrollRenderDue(now.QuadPart) <= now.QuadPart;
+            continue;
+        }
+        LONGLONG wake = due > now.QuadPart && due < deadline - cost ? due : deadline;
+        if (poll && wake > now.QuadPart + g_qpcFreq / 500)
+            wake = now.QuadPart + g_qpcFreq / 500;
+        WaitUntil(wake, now);
+    }
+}
+
 static void PaceFrame(int fps)
 {
-    if (fps <= 0)
+    if (fps <= 0 || !EnsureClock())
         return;
-
-    if (!g_qpcFreq)
-    {
-        LARGE_INTEGER f;
-        if (!QueryPerformanceFrequency(&f))
-            return;
-        g_qpcFreq = f.QuadPart;
-
-        HANDLE(WINAPI * createTimerExW)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD) =
-            (HANDLE(WINAPI *)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD))GetProcAddress(
-                GetModuleHandleA("kernel32.dll"), "CreateWaitableTimerExW");
-        if (createTimerExW)
-            g_paceTimer = createTimerExW(NULL, NULL, 0x00000002 | 0x00000001, TIMER_ALL_ACCESS);
-        if (!g_paceTimer)
-            g_paceTimer = CreateWaitableTimerA(NULL, TRUE, NULL);
-    }
 
     const LONGLONG period = g_qpcFreq / fps;
 
@@ -740,65 +777,44 @@ static void PaceFrame(int fps)
         return;
     }
 
-    FindScrollRenderer();
-    if (g_renderScrollFrame && g_scrollRenderDue)
-    {
-        while (now.QuadPart < g_nextFrame)
-        {
-            LONGLONG due = g_scrollRenderDue(now.QuadPart);
-            if (due <= now.QuadPart)
-            {
-                g_renderScrollFrame();
-                QueryPerformanceCounter(&now);
-                continue;
-            }
-            WaitUntil(due < g_nextFrame ? due : g_nextFrame, now);
-        }
-        g_nextFrame += period;
-        return;
-    }
-
-    const LONGLONG cameraPeriod = g_qpcFreq / 240;
-    if (!g_nextCameraFrame || now.QuadPart - g_nextCameraFrame > cameraPeriod)
-        g_nextCameraFrame = now.QuadPart;
-
-    while (now.QuadPart < g_nextFrame)
-    {
-        if (g_renderScrollFrame && now.QuadPart >= g_nextCameraFrame)
-        {
-            g_renderScrollFrame();
-            QueryPerformanceCounter(&now);
-            g_nextCameraFrame += cameraPeriod;
-            // An expensive draw must not cause a burst of catch-up draws.
-            if (g_nextCameraFrame <= now.QuadPart)
-                g_nextCameraFrame = now.QuadPart + cameraPeriod;
-            if (now.QuadPart >= g_nextFrame)
-                break;
-        }
-        LONGLONG wake = g_nextFrame;
-        if (g_renderScrollFrame && g_nextCameraFrame < wake)
-            wake = g_nextCameraFrame;
-        LONGLONG remain = wake - now.QuadPart;
-        LONGLONG spin = g_qpcFreq / 2000;
-        if (g_paceTimer && remain > spin)
-        {
-            LARGE_INTEGER due;
-            due.QuadPart = -((remain - spin) * 10000000 / g_qpcFreq);
-            if (SetWaitableTimer(g_paceTimer, &due, 0, NULL, NULL, FALSE))
-                WaitForSingleObject(g_paceTimer, INFINITE);
-        }
-        while (QueryPerformanceCounter(&now), now.QuadPart < wake)
-            YieldProcessor();
-    }
-
+    ScrollDrawsUntil(g_nextFrame, now, NULL);
     g_nextFrame += period;
+}
+
+static const SpeedProfile *g_speed;
+
+static void NetworkScrollWait()
+{
+    DWORD start = *(DWORD *)g_speed->netStart;
+    if (start == 0xFFFFFFFF || !EnsureClock())
+        return;
+    int remainMs = (int)*(DWORD *)g_speed->netDelay - (int)((*g_speed->timeGetTime)() - start) - 1;
+    if (remainMs <= 0)
+        return;
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    ScrollDrawsUntil(now.QuadPart + remainMs * g_qpcFreq / 1000, now, (PollFn)g_speed->netPoll);
 }
 
 static void __cdecl AlternateDelay()
 {
+    DWORD mode = *g_gameMode;
+    bool paced = mode == GAMEMODE_CAMPAIGN || mode == GAMEMODE_SKIRMISH;
+    static DWORD s_loggedMode = (DWORD)-1;
+    if (mode != s_loggedMode)
+    {
+        s_loggedMode = mode;
+        SpeedLog("  game mode %d, %s", mode, paced ? "speed keys and scroll draws" : "scroll draws only");
+    }
+    if (!paced)
+    {
+        g_nextFrame = 0;
+        NetworkScrollWait();
+        return;
+    }
     PollSpeedKeys();
 
-    *g_delaySlot = ALT_FAST;
+    *g_delaySlot = 0;
     PaceFrame(kSteps[g_step].fps);
 }
 
@@ -842,6 +858,8 @@ static void InstallAlternatingSpeed(const SpeedProfile *s)
     }
 
     g_delaySlot = (DWORD *)s->delaySlot;
+    g_gameMode = (const DWORD *)s->gameMode;
+    g_speed = s;
 
     BYTE *stub = g_stubEnd;
     EmitByte(0x60);
@@ -912,11 +930,11 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         if (!HostIsGame())
             return TRUE;
         InstallCampaignSpeed();
+        InstallQueueBatch();
         if (IsDebuggerPresent())
             return TRUE;
         InstallInline();
         InstallHealerEscort();
-        InstallQueueBatch();
     }
     return TRUE;
 }
