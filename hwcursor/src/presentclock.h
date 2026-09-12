@@ -63,6 +63,7 @@ namespace PresentClock
     static int g_costNext;
     static int g_divisor = 1;
     static LONGLONG g_fasterSince;
+    static LONGLONG g_slowCost;
 
     inline void RecordCost(LONGLONG cost, LONGLONG now)
     {
@@ -83,6 +84,7 @@ namespace PresentClock
                 sorted[j - 1] = t;
             }
         LONGLONG slow = sorted[g_costCount * 9 / 10] + g_freq / 2000;
+        g_slowCost = slow;
         int wanted = (int)((slow + g_period - 1) / g_period);
         if (wanted < 1)
             wanted = 1;

@@ -20,9 +20,16 @@ namespace SmoothScroll
 
     inline bool Available(DWORD setPos)
     {
-        return setPos && GetModuleHandleA(NULL) == (HMODULE)0x00400000 &&
-               !IsBadReadPtr((void *)setPos, sizeof(kSetPosSig)) &&
-               memcmp((const void *)setPos, kSetPosSig, sizeof(kSetPosSig)) == 0;
+        static DWORD s_checked;
+        static bool s_ok;
+        if (s_checked != setPos)
+        {
+            s_checked = setPos;
+            s_ok = setPos && GetModuleHandleA(NULL) == (HMODULE)0x00400000 &&
+                   !IsBadReadPtr((void *)setPos, sizeof(kSetPosSig)) &&
+                   memcmp((const void *)setPos, kSetPosSig, sizeof(kSetPosSig)) == 0;
+        }
+        return s_ok;
     }
 
     inline bool Tick(DWORD instance, DWORD setPos)
@@ -32,7 +39,7 @@ namespace SmoothScroll
             return false;
 
         void *tac = *(void **)instance;
-        if (!tac || IsBadWritePtr(tac, kPosY + 4))
+        if (!tac)
             return false;
 
         LONGLONG target = PresentClock::CameraTarget(PresentClock::Now());

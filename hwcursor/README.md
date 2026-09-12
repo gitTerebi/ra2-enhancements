@@ -74,17 +74,16 @@ The DLLs check the exe they land in and refuse to patch anything they do not rec
 so a mismatched build no-ops rather than crashing. If you use Steam's `gamemd.exe` with
 Mental Omega, note MO needs its patched Syringe; that is an MO issue, not this one.
 
-**Multiplayer:** this changes how the cursor is drawn and synthesises the same scroll
-input the arrow keys produce. It does not touch game logic, units, or the network
-protocol.
+**Multiplayer:** this changes how the cursor is drawn and moves the camera locally. It
+does not touch game logic, units, or the network protocol.
 
 ## Build
 
 WASD camera movement now runs at entry to `GScreenClass::GetInputAndUpdate`,
 before its input/update work, using elapsed time and fractional-pixel accumulation.
 The hook validates the function signature and preserves CPU and floating-point
-state. It is installed during DLL loading; if validation fails, a worker uses
-the arrow-key fallback. The exported Syringe tick remains for loader compatibility.
+state. It is installed during DLL loading; if validation fails, WASD scrolling is
+off. Its one Syringe hook runs once at startup and only makes Syringe load the DLL.
 With `RA2Enhancements.dll` installed, the simulation limiter also calls
 `RenderScrollFrame` during its wait, targeting 240 camera updates per second while
 WASD or a right-button drag moves the map. Each update uses the game's idle-render sequence, without
@@ -115,7 +114,7 @@ into the game folder three levels above this folder.
 | --- | --- |
 | `src/gameprofile.h` | game detection and the per-exe address tables both feature DLLs need |
 | `src/hwcursor.cpp` | `HWCursor.dll` — SHP frame to `HCURSOR`, palette conversion, cache |
-| `src/wasd.cpp` | `WasdScroll.dll` — inline hook on the scroll tick, plus a key-synth fallback |
+| `src/wasd.cpp` | `WasdScroll.dll`: inline hook on the scroll tick and the camera redraw exports |
 | `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
 | `src/dsoundforward.h` | the 12 DirectSound export thunks |
 

@@ -1,2 +1,2 @@
-; TacticalClass::CoordsToClient entry - per-frame main-thread tick for WASD scroll
-6D2140 = Tactical_WasdTick, 8
+; WWMouseClass thread start, called once from WinMain 6BB9A0; only makes Syringe load WasdScroll.dll
+7B84F0 = WasdScroll_Loaded, 5

@@ -1,9 +1,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include "gameprofile.h"
-#include "wasdscroll.h"
 #include "smoothscroll.h"
 #include "rightscroll.h"
+#include "profiler.h"
 
 static const GameProfile *g_game;
 static bool g_scrollHooked;
@@ -85,11 +85,31 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
     g_rendering = false;
 }
 
+static bool ScrollInputActive()
+{
+    if (!*(void **)g_game->tacticalInstance)
+        return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    if (pid != GetCurrentProcessId())
+        return false;
+    if (RightScroll::g_profile && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) &&
+        *(BYTE *)(g_game->mapInstance + RightScroll::g_profile->captureOffset) == 1)
+        return true;
+    return ((GetAsyncKeyState('W') | GetAsyncKeyState('A') | GetAsyncKeyState('S') |
+             GetAsyncKeyState('D')) & 0x8000) != 0;
+}
+
 extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderDue(LONGLONG now)
 {
-    if (!g_scrollHooked || !g_game)
+    if (!g_scrollHooked || !g_game || !ScrollInputActive())
         return MAXLONGLONG;
     return PresentClock::RenderDue(now);
+}
+
+extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderCost()
+{
+    return PresentClock::g_slowCost;
 }
 
 static const GameProfile *Game()
@@ -104,6 +124,7 @@ extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map)
     const GameProfile *g = Game();
     if (g && map == (void *)g->mapInstance)
     {
+        DrawProfiler::StartOnThisThread(&g_rendering);
         LONGLONG start = QpcNow();
         SmoothScroll::Tick(g->tacticalInstance, g->setTacticalPos);
         CamTrace(1, start, SmoothScroll::g_moved);
@@ -162,21 +183,8 @@ static void InstallScrollHook()
     g_scrollHooked = true;
 }
 
-static DWORD WINAPI TickThread(LPVOID)
+EXPORT_FUNC(WasdScroll_Loaded)
 {
-    for (;;)
-    {
-        if (!g_scrollHooked)
-        {
-            WasdScroll::Tick();
-        }
-        Sleep(2);
-    }
-}
-
-EXPORT_FUNC(Tactical_WasdTick)
-{
-    // The worker owns fallback key state; do not race it from a render hook.
     return 0;
 }
 
@@ -188,7 +196,6 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         if (!HostIsGame())
             return TRUE;
         // Install while the loading thread is stopped, before gameplay starts.
-        // Never rewrite executable instructions from the polling worker.
         InstallScrollHook();
         if (g_scrollHooked)
         {
@@ -197,8 +204,6 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
                                                0xA8EB70 : 0xA40B24);
             RightScroll::Install(strcmp(g_game->name, "gamemd") == 0);
         }
-        if (!g_scrollHooked)
-            CloseHandle(CreateThread(NULL, 0, TickThread, NULL, 0, NULL));
     }
     return TRUE;
 }

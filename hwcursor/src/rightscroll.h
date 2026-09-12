@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>
 #include "scrollspeed.h"
 #include "presentclock.h"
 
@@ -26,6 +27,7 @@ namespace RightScroll
     static double g_frequency, g_scale;
     static double g_fraction[2];
     static double g_axis[2];
+    static int g_lastPoint[2] = {INT_MIN, INT_MIN};
 
     typedef void (__thiscall *UpdateFn)(void *, int *);
     typedef bool (__thiscall *ScrollFn)(void *, int, int *, bool);
@@ -72,6 +74,8 @@ namespace RightScroll
         double length = sqrt(dx * dx + dy * dy);
         g_axis[0] = length ? fabs(dx) / length : 0;
         g_axis[1] = length ? fabs(dy) / length : 0;
+        g_lastPoint[0] = point[0];
+        g_lastPoint[1] = point[1];
         ((UpdateFn)g_profile->update)(map, point);
     }
 
@@ -88,6 +92,7 @@ namespace RightScroll
         {
             g_last = 0;
             g_fraction[0] = g_fraction[1] = 0;
+            g_lastPoint[0] = g_lastPoint[1] = INT_MIN;
             return false;
         }
         void *mouse = *(void **)g_profile->mouse;
@@ -99,6 +104,8 @@ namespace RightScroll
         int *current = (*(GetPointFn **)mouse)[0x34 / 4](mouse, point);
         point[0] = current[0] - *(int *)g_profile->viewOrigin;
         point[1] = current[1] - *(int *)(g_profile->viewOrigin + 4);
+        if (*(int *)g_profile->method != 0 && point[0] == g_lastPoint[0] && point[1] == g_lastPoint[1])
+            return false;
         // Native Scroll_Map writes the pending camera position (D74/D78).
         // Tactical's render update applies it to D64/D68 afterward.
         int x = *(int *)(tactical + 0xD74), y = *(int *)(tactical + 0xD78);
