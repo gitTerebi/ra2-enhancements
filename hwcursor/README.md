@@ -13,12 +13,12 @@ game exe.
   the arrow keys and edge scroll you already have. Ctrl and Alt are ignored so hotkeys
   still work. **Fully optional: it is a separate DLL, so leave it out and you do not
   get it.**
-Pairs with [ra2-enhancements](https://github.com/gitTerebi/ra2-enhancements), engine fixes
-and game speed keys in a DLL this `dsound.dll` loads the same way. It used to live here.
+Pairs with [`ra2enhancements`](../ra2enhancements) in this repo, engine fixes and game
+speed keys in a DLL this `dsound.dll` loads the same way.
 
 Pairs with [cnc-ddraw-ra2](https://github.com/gitTerebi/cnc-ddraw-ra2), a renderer fork
-whose `fixchilds=5` keeps the RA2 menus clickable while the game is upscaled. It also
-carries `RA2Video.exe`, the `ddraw.ini` resolution picker that used to ship here.
+whose `fixchilds=5` keeps the RA2 menus clickable while the game is upscaled.
+[`ra2video`](../ra2video) in this repo is the `ddraw.ini` resolution picker for it.
 
 32-bit, Windows only, matching the game.
 
@@ -38,9 +38,8 @@ feature DLLs you want next to it.
 | WASD | `dsound.dll` + `WasdScroll.dll` |
 | Both | `dsound.dll` + `HWCursor.dll` + `WasdScroll.dll` |
 
-`dsound.dll` also loads `RA2Enhancements.dll` from
-[ra2-enhancements](https://github.com/gitTerebi/ra2-enhancements) if you drop that in
-beside it.
+`dsound.dll` also loads `RA2Enhancements.dll` from [`ra2enhancements`](../ra2enhancements)
+if you drop that in beside it.
 
 The game statically imports DirectSound, so Windows loads our `dsound.dll` from the game
 folder before the first instruction runs. It forwards all 12 exports to the real
@@ -88,7 +87,7 @@ build.cmd
 ```
 
 Outputs `HWCursor.dll`, `WasdScroll.dll` and `dsound.dll` into `_dist\` and copies them
-into the game folder above the repo.
+into the game folder three levels above this folder.
 
 ## Source layout
 
@@ -110,7 +109,7 @@ hook site, because under Syringe the bytes at a hook site are already Syringe's.
 
 ## Licence
 
-MIT, see `LICENSE`.
+MIT, see [`LICENSE`](../LICENSE) at the repo root.
 
 Not affiliated with or endorsed by EA. Red Alert 2 and Yuri's Revenge are EA's
 trademarks. This ships no game content — you need your own copy of the game.

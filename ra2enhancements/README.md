@@ -19,9 +19,8 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
 - **Shift-queue five.** Shift-click a sidebar cameo to queue 5 of that unit, shift
   right-click to remove 5.
 
-Pairs with [ra2-hwcursor-wasd](https://github.com/gitTerebi/ra2-hwcursor-wasd), which adds
-a hardware mouse cursor and WASD map scrolling, and ships the `dsound.dll` loader this DLL
-uses on vanilla.
+Pairs with [`hwcursor`](../hwcursor) in this repo, which adds a hardware mouse cursor and
+WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
 
 32-bit, Windows only, matching the game.
 
@@ -34,7 +33,7 @@ Copy files into your game folder (the one with `gamemd.exe` / `game.exe` in it).
 | Copy | From |
 | --- | --- |
 | `RA2Enhancements.dll` | here |
-| `dsound.dll` | [ra2-hwcursor-wasd](https://github.com/gitTerebi/ra2-hwcursor-wasd) |
+| `dsound.dll` | [`hwcursor`](../hwcursor) |
 
 The game statically imports DirectSound, so Windows loads `dsound.dll` from the game folder
 before the first instruction runs. That proxy forwards all 12 exports to the real
@@ -91,7 +90,7 @@ build.cmd
 ```
 
 The script outputs `RA2Enhancements.dll` into `_dist\` and copies it into the game folder
-above the repo.
+three levels above this folder.
 
 ## Source layout
 
@@ -117,7 +116,7 @@ Credit: the speed hook sites come from Phobos, `src/Misc/Hooks.Gamespeed.cpp`.
 
 ## Licence
 
-MIT, see `LICENSE`.
+MIT, see [`LICENSE`](../LICENSE) at the repo root.
 
 Not affiliated with or endorsed by EA. Red Alert 2 and Yuri's Revenge are EA's trademarks.
 This ships no game content, so you need your own copy of the game.

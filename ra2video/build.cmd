@@ -2,7 +2,7 @@
 setlocal
 set "VC=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
 set "ROOT=%~dp0"
-set "GAME=%~dp0..\.."
+set "GAME=%~dp0..\..\.."
 
 tasklist /fi "imagename eq RA2Video.exe" 2>nul | find /i "RA2Video.exe" >nul && (
     echo ERROR: RA2Video.exe is running, close it before building. & exit /b 1
@@ -18,5 +18,6 @@ cl /nologo /O2 /MT /Fe:RA2Video.exe "%ROOT%src\ra2video.cpp" ^
 if not exist "%ROOT%_dist" mkdir "%ROOT%_dist"
 copy /y RA2Video.exe "%ROOT%_dist\RA2Video.exe" >nul || (echo ERROR: copy to _dist failed. & exit /b 1)
 copy /y RA2Video.exe "%GAME%\RA2Video.exe" >nul || (echo ERROR: copy to game folder failed. & exit /b 1)
+copy /y "%ROOT%INSTALL.txt" "%ROOT%_dist\README.txt" >nul || (echo ERROR: copy INSTALL.txt failed. & exit /b 1)
 
 echo RA2Video.exe -^> _dist and game folder

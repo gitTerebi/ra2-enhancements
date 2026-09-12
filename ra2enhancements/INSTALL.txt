@@ -25,7 +25,7 @@ folder (the one with gamemd.exe / game.exe in it).
 Vanilla Red Alert 2 / Yuri's Revenge
 ------------------------------------
   RA2Enhancements.dll  from here
-  dsound.dll           from ra2-hwcursor-wasd, it is the loader
+  dsound.dll           from the hwcursor zip, it is the loader
 
 The game imports DirectSound statically, so Windows loads dsound.dll from
 the game folder before the first instruction runs. That proxy forwards all
@@ -49,9 +49,10 @@ Delete RA2Enhancements.dll. Nothing else depends on it.
 
 Also worth having
 -----------------
-ra2-hwcursor-wasd adds a hardware mouse cursor and WASD map scrolling, and
-ships the dsound.dll loader:
-https://github.com/gitTerebi/ra2-hwcursor-wasd
+HWCursor.dll and WasdScroll.dll add a hardware mouse cursor and WASD map
+scrolling, and ship the dsound.dll loader this DLL needs on vanilla. They
+are in the same repo, in the hwcursor folder, and in their own release
+zip.
 
 cnc-ddraw-ra2 is a renderer fork whose fixchilds=5 keeps the RA2 menus
 clickable while the game is upscaled:

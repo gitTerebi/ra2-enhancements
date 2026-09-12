@@ -11,7 +11,7 @@ and the window size, position and shader chain to `ddraw.ini`.
 
 Needs Visual Studio 2022 Community with the x86 toolset. The script refuses to
 build while RA2Video.exe is running, and copies the result to `_dist` and to the
-game folder two levels up.
+game folder three levels up.
 
 ## Settings it writes
 
@@ -33,3 +33,10 @@ game folder two levels up.
 Window sizing accounts for per-monitor DPI and for the invisible DWM drop-shadow
 border, measured from a hidden `WS_OVERLAPPEDWINDOW` probe so the inset matches
 the resizable game window rather than this tool's own dialog.
+
+## Licence
+
+MIT, see [`LICENSE`](../LICENSE) at the repo root.
+
+Not affiliated with or endorsed by EA. Red Alert 2 and Yuri's Revenge are EA's
+trademarks.

@@ -1,0 +1,56 @@
+RA2Video
+========
+https://github.com/gitTerebi/ra2-enhancements
+
+Video settings tool for Red Alert 2 / Yuri's Revenge running under
+cnc-ddraw. Copy RA2Video.exe into your game folder (the one with
+gamemd.exe / game.exe in it) and run it.
+
+It writes the render resolution to the game INIs, and the window size,
+position and shader chain to ddraw.ini. It never loads into the game, so
+it is safe to run with the game closed and delete afterwards.
+
+
+What it writes
+--------------
+  game INIs   [Video] ScreenWidth, ScreenHeight
+              in RA2MD.ini, RA2.ini and RA2MO.ini
+
+  ddraw.ini   inject_resolution, width, height, windowed, border,
+              fullscreen, posX, posY, center_window, shader
+
+ra2video_mode in ddraw.ini remembers the output entry you picked.
+
+
+Output modes
+------------
+  Windowed maximised     keeps the title bar and fills the work area
+  Borderless maximised   drops the frame, taskbar stays visible
+  Borderless fullscreen  covers the desktop including the taskbar
+
+Fixed sizes are offered when they fit the work area, and are marked when
+they match the game aspect ratio. Window sizing accounts for per-monitor
+DPI and for the invisible DWM drop-shadow border.
+
+
+You need cnc-ddraw
+------------------
+This tool only writes settings. The renderer that reads them is
+cnc-ddraw. Use the fork, whose fixchilds=5 keeps the RA2 menus clickable
+while the game is upscaled:
+https://github.com/gitTerebi/cnc-ddraw-ra2
+
+
+Also worth having
+-----------------
+HWCursor.dll, WasdScroll.dll and RA2Enhancements.dll are in the same
+repo, in the hwcursor and ra2enhancements folders, each with its own
+release zip.
+
+
+Uninstall
+---------
+Delete RA2Video.exe. The settings it wrote stay in the ini files.
+
+32-bit only, matching the game. Built with the VS 2022 x86 toolset.
+MIT licensed. Not affiliated with or endorsed by EA.

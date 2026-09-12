@@ -1,6 +1,6 @@
 RA2 HWCursor + WASD
 ===================
-https://github.com/gitTerebi/ra2-hwcursor-wasd
+https://github.com/gitTerebi/ra2-enhancements
 
 Two features, one DLL each. Copy only the ones you want into your game
 folder (the one with gamemd.exe / game.exe in it).
@@ -52,13 +52,15 @@ so removing one leaves the other working.
 
 Also worth having
 -----------------
-ra2-enhancements adds engine fixes and game speed keys. dsound.dll loads
-it the same way, or Syringe picks up its .inj:
-https://github.com/gitTerebi/ra2-enhancements
+RA2Enhancements.dll adds engine fixes and game speed keys. dsound.dll
+loads it the same way, or Syringe picks up its .inj. It is in the same
+repo, in the ra2enhancements folder, and in its own release zip.
+
+RA2Video.exe is the resolution and window picker for cnc-ddraw. It is in
+the same repo, in the ra2video folder.
 
 cnc-ddraw-ra2 is a renderer fork whose fixchilds=5 keeps the RA2 menus
-clickable while the game is upscaled. It also carries RA2Video.exe, the
-resolution picker that used to ship here:
+clickable while the game is upscaled:
 https://github.com/gitTerebi/cnc-ddraw-ra2
 
 

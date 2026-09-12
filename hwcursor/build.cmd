@@ -2,7 +2,7 @@
 setlocal
 set "VC=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
 set "ROOT=%~dp0"
-set "GAME=%~dp0..\.."
+set "GAME=%~dp0..\..\.."
 
 tasklist /fi "imagename eq game.exe" 2>nul | find /i "game.exe" >nul && (
     echo ERROR: game.exe is running, close it before building. & exit /b 1
