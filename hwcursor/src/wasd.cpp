@@ -33,7 +33,7 @@ static void OpenCamTrace()
     if (!g_camTrace)
         return;
     setvbuf(g_camTrace, NULL, _IOFBF, 1 << 20);
-    fprintf(g_camTrace, "source,start,end,x,y,moved\n");
+    fprintf(g_camTrace, "source,start,end,x,y,moved,divisor,target\n");
 }
 
 static void CamTrace(int source, LONGLONG start, bool moved)
@@ -45,8 +45,9 @@ static void CamTrace(int source, LONGLONG start, bool moved)
         return;
     LARGE_INTEGER end;
     QueryPerformanceCounter(&end);
-    fprintf(g_camTrace, "%d,%lld,%lld,%d,%d,%d\n", source, start, end.QuadPart,
-            *(int *)(tac + 0xD64), *(int *)(tac + 0xD68), moved ? 1 : 0);
+    fprintf(g_camTrace, "%d,%lld,%lld,%d,%d,%d,%d,%lld\n", source, start, end.QuadPart,
+            *(int *)(tac + 0xD64), *(int *)(tac + 0xD68), moved ? 1 : 0,
+            PresentClock::g_divisor, PresentClock::g_renderedTarget);
     if (++g_camTraceLines % 1000 == 0)
         fflush(g_camTrace);
 }
@@ -66,7 +67,6 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         return;
     g_rendering = true;
     LONGLONG start = QpcNow();
-    PresentClock::g_renderedTarget = PresentClock::Target(start);
     SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
     bool rightMoved = RightScroll::Tick(g_game->mapInstance, g_game->tacticalInstance);
     bool moved = SmoothScroll::g_moved || rightMoved;
@@ -79,6 +79,7 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         (*(Method **)tactical)[0x5C / 4](tactical);
         // GScreenClass::DrawOnTop renders layers and presents the complete scene.
         (*(Method **)map)[0x3C / 4](map);
+        PresentClock::RecordCost(QpcNow() - start, start);
     }
     CamTrace(0, start, moved);
     g_rendering = false;

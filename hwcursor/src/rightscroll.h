@@ -56,7 +56,7 @@ namespace RightScroll
 
     static void __fastcall Update(void *map, void *, int *point)
     {
-        LONGLONG target = PresentClock::Target(PresentClock::Now());
+        LONGLONG target = PresentClock::CameraTarget(PresentClock::Now());
         if (!*(BYTE *)((BYTE *)map + g_profile->captureOffset - 2))
         {
             g_last = 0;

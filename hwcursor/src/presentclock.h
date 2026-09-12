@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <dwmapi.h>
+#include <string.h>
 
 namespace PresentClock
 {
@@ -55,9 +56,62 @@ namespace PresentClock
         return now - offset + g_period;
     }
 
+    static const int kCostSamples = 32;
+    static const int kMaxDivisor = 8;
+    static LONGLONG g_costs[kCostSamples];
+    static int g_costCount;
+    static int g_costNext;
+    static int g_divisor = 1;
+    static LONGLONG g_fasterSince;
+
+    inline void RecordCost(LONGLONG cost, LONGLONG now)
+    {
+        g_costs[g_costNext] = cost;
+        g_costNext = (g_costNext + 1) % kCostSamples;
+        if (g_costCount < kCostSamples)
+            ++g_costCount;
+        if (g_costCount < 8 || !g_period)
+            return;
+
+        LONGLONG sorted[kCostSamples];
+        memcpy(sorted, g_costs, sizeof(LONGLONG) * g_costCount);
+        for (int i = 1; i < g_costCount; ++i)
+            for (int j = i; j > 0 && sorted[j - 1] > sorted[j]; --j)
+            {
+                LONGLONG t = sorted[j];
+                sorted[j] = sorted[j - 1];
+                sorted[j - 1] = t;
+            }
+        LONGLONG slow = sorted[g_costCount * 9 / 10] + g_freq / 2000;
+        int wanted = (int)((slow + g_period - 1) / g_period);
+        if (wanted < 1)
+            wanted = 1;
+        if (wanted > kMaxDivisor)
+            wanted = kMaxDivisor;
+
+        if (wanted >= g_divisor)
+        {
+            g_divisor = wanted;
+            g_fasterSince = 0;
+        }
+        else if (!g_fasterSince)
+            g_fasterSince = now;
+        else if (now - g_fasterSince > g_freq)
+        {
+            g_divisor = wanted;
+            g_fasterSince = 0;
+        }
+    }
+
+    inline LONGLONG CameraTarget(LONGLONG now)
+    {
+        if (now >= g_renderedTarget)
+            g_renderedTarget = Target(now) + (g_divisor - 1) * g_period;
+        return g_renderedTarget;
+    }
+
     inline LONGLONG RenderDue(LONGLONG now)
     {
-        LONGLONG target = Target(now);
-        return g_renderedTarget < target ? now : target;
+        return now >= g_renderedTarget ? now : g_renderedTarget;
     }
 }

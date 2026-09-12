@@ -35,7 +35,7 @@ namespace SmoothScroll
         if (!tac || IsBadWritePtr(tac, kPosY + 4))
             return false;
 
-        LONGLONG target = PresentClock::Target(PresentClock::Now());
+        LONGLONG target = PresentClock::CameraTarget(PresentClock::Now());
         if (g_freq == 0.0)
         {
             LARGE_INTEGER f;
