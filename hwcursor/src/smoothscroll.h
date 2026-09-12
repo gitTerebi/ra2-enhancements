@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <stdlib.h>
 #include "scrollspeed.h"
+#include "presentclock.h"
 
 namespace SmoothScroll
 {
@@ -34,18 +35,17 @@ namespace SmoothScroll
         if (!tac || IsBadWritePtr(tac, kPosY + 4))
             return false;
 
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
+        LONGLONG target = PresentClock::Target(PresentClock::Now());
         if (g_freq == 0.0)
         {
             LARGE_INTEGER f;
             QueryPerformanceFrequency(&f);
             g_freq = (double)f.QuadPart;
-            g_last = now.QuadPart;
+            g_last = target;
             return true;
         }
-        double dt = (now.QuadPart - g_last) / g_freq;
-        g_last = now.QuadPart;
+        double dt = (target - g_last) / g_freq;
+        g_last = target;
         if (dt > 0.05)
             dt = 0.05;
 

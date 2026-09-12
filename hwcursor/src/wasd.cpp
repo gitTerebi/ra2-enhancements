@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <stdio.h>
 #include "gameprofile.h"
 #include "wasdscroll.h"
 #include "smoothscroll.h"
@@ -8,6 +9,54 @@ static const GameProfile *g_game;
 static bool g_scrollHooked;
 static DWORD g_scrollResume;
 static bool g_rendering;
+static FILE *g_camTrace;
+static int g_camTraceLines;
+
+static void OpenCamTrace()
+{
+    char dir[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, dir, sizeof(dir));
+    char *slash = n ? strrchr(dir, '\\') : NULL;
+    if (!slash)
+        return;
+    slash[1] = 0;
+    char ini[MAX_PATH], path[MAX_PATH];
+    _snprintf(ini, sizeof(ini) - 1, "%sddraw.ini", dir);
+    ini[sizeof(ini) - 1] = 0;
+    char value[16];
+    GetPrivateProfileStringA("ddraw", "frametrace", "", value, sizeof(value), ini);
+    if (_stricmp(value, "true") != 0 && strcmp(value, "1") != 0)
+        return;
+    _snprintf(path, sizeof(path) - 1, "%scamtrace.csv", dir);
+    path[sizeof(path) - 1] = 0;
+    g_camTrace = fopen(path, "w");
+    if (!g_camTrace)
+        return;
+    setvbuf(g_camTrace, NULL, _IOFBF, 1 << 20);
+    fprintf(g_camTrace, "source,start,end,x,y,moved\n");
+}
+
+static void CamTrace(int source, LONGLONG start, bool moved)
+{
+    if (!g_camTrace || !g_game)
+        return;
+    BYTE *tac = *(BYTE **)g_game->tacticalInstance;
+    if (!tac)
+        return;
+    LARGE_INTEGER end;
+    QueryPerformanceCounter(&end);
+    fprintf(g_camTrace, "%d,%lld,%lld,%d,%d,%d\n", source, start, end.QuadPart,
+            *(int *)(tac + 0xD64), *(int *)(tac + 0xD68), moved ? 1 : 0);
+    if (++g_camTraceLines % 1000 == 0)
+        fflush(g_camTrace);
+}
+
+static LONGLONG QpcNow()
+{
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return now.QuadPart;
+}
 
 // Called on the game thread by RA2Enhancements while its simulation timer waits.
 // Do not dispatch Map input here: that can consume commands or open modal dialogs.
@@ -16,9 +65,12 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
     if (!g_scrollHooked || g_rendering || !g_game)
         return;
     g_rendering = true;
+    LONGLONG start = QpcNow();
+    PresentClock::g_renderedTarget = PresentClock::Target(start);
     SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
     bool rightMoved = RightScroll::Tick(g_game->mapInstance, g_game->tacticalInstance);
-    if (SmoothScroll::g_moved || rightMoved)
+    bool moved = SmoothScroll::g_moved || rightMoved;
+    if (moved)
     {
         void *tactical = *(void **)g_game->tacticalInstance;
         void *map = (void *)g_game->mapInstance;
@@ -28,7 +80,15 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         // GScreenClass::DrawOnTop renders layers and presents the complete scene.
         (*(Method **)map)[0x3C / 4](map);
     }
+    CamTrace(0, start, moved);
     g_rendering = false;
+}
+
+extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderDue(LONGLONG now)
+{
+    if (!g_scrollHooked || !g_game)
+        return MAXLONGLONG;
+    return PresentClock::RenderDue(now);
 }
 
 static const GameProfile *Game()
@@ -42,7 +102,11 @@ extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map)
 {
     const GameProfile *g = Game();
     if (g && map == (void *)g->mapInstance)
+    {
+        LONGLONG start = QpcNow();
         SmoothScroll::Tick(g->tacticalInstance, g->setTacticalPos);
+        CamTrace(1, start, SmoothScroll::g_moved);
+    }
 }
 
 static __declspec(naked) void ScrollStub()
@@ -127,6 +191,7 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         InstallScrollHook();
         if (g_scrollHooked)
         {
+            OpenCamTrace();
             ScrollSpeed::g_rate = (const int *)(strcmp(g_game->name, "gamemd") == 0 ?
                                                0xA8EB70 : 0xA40B24);
             RightScroll::Install(strcmp(g_game->name, "gamemd") == 0);

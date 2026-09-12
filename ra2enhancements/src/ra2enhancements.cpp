@@ -497,7 +497,9 @@ static HANDLE g_paceTimer;
 static int g_pacedStep = -1;
 static LONGLONG g_nextCameraFrame;
 typedef void (__cdecl *RenderScrollFrameFn)();
+typedef LONGLONG (__cdecl *ScrollRenderDueFn)(LONGLONG now);
 static RenderScrollFrameFn g_renderScrollFrame;
+static ScrollRenderDueFn g_scrollRenderDue;
 
 static void FindScrollRenderer()
 {
@@ -505,7 +507,25 @@ static void FindScrollRenderer()
         return;
     HMODULE scroll = GetModuleHandleA("WasdScroll.dll");
     if (scroll)
+    {
         g_renderScrollFrame = (RenderScrollFrameFn)GetProcAddress(scroll, "RenderScrollFrame");
+        g_scrollRenderDue = (ScrollRenderDueFn)GetProcAddress(scroll, "ScrollRenderDue");
+    }
+}
+
+static void WaitUntil(LONGLONG wake, LARGE_INTEGER &now)
+{
+    LONGLONG remain = wake - now.QuadPart;
+    LONGLONG spin = g_qpcFreq / 2000;
+    if (g_paceTimer && remain > spin)
+    {
+        LARGE_INTEGER due;
+        due.QuadPart = -((remain - spin) * 10000000 / g_qpcFreq);
+        if (SetWaitableTimer(g_paceTimer, &due, 0, NULL, NULL, FALSE))
+            WaitForSingleObject(g_paceTimer, INFINITE);
+    }
+    while (QueryPerformanceCounter(&now), now.QuadPart < wake)
+        YieldProcessor();
 }
 
 static void PaceFrame(int fps)
@@ -543,6 +563,23 @@ static void PaceFrame(int fps)
     }
 
     FindScrollRenderer();
+    if (g_renderScrollFrame && g_scrollRenderDue)
+    {
+        while (now.QuadPart < g_nextFrame)
+        {
+            LONGLONG due = g_scrollRenderDue(now.QuadPart);
+            if (due <= now.QuadPart)
+            {
+                g_renderScrollFrame();
+                QueryPerformanceCounter(&now);
+                continue;
+            }
+            WaitUntil(due < g_nextFrame ? due : g_nextFrame, now);
+        }
+        g_nextFrame += period;
+        return;
+    }
+
     const LONGLONG cameraPeriod = g_qpcFreq / 240;
     if (!g_nextCameraFrame || now.QuadPart - g_nextCameraFrame > cameraPeriod)
         g_nextCameraFrame = now.QuadPart;

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "scrollspeed.h"
+#include "presentclock.h"
 
 namespace RightScroll
 {
@@ -55,15 +56,14 @@ namespace RightScroll
 
     static void __fastcall Update(void *map, void *, int *point)
     {
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
+        LONGLONG target = PresentClock::Target(PresentClock::Now());
         if (!*(BYTE *)((BYTE *)map + g_profile->captureOffset - 2))
         {
             g_last = 0;
             g_fraction[0] = g_fraction[1] = 0;
         }
-        double dt = g_last ? (now.QuadPart - g_last) / g_frequency : 0.0;
-        g_last = now.QuadPart;
+        double dt = g_last ? (target - g_last) / g_frequency : 0.0;
+        g_last = target;
         if (dt > 0.05) dt = 0.05;
         g_scale = dt;
         int *anchor = (int *)((BYTE *)map + g_profile->captureOffset - 10);
