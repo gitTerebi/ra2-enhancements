@@ -261,13 +261,28 @@ static int WorkAreaDpi(void)
 
 #define GAME_WINDOW_STYLE 0x96CF0000
 
+static BOOL CALLBACK FindGameTitle(HWND hwnd, LPARAM lp)
+{
+    static const char *kTitles[] = {"Red Alert 2", "Yuri's Revenge", "OpenRA"};
+    char title[160];
+    int len = GetWindowTextA(hwnd, title, sizeof(title));
+    for (int i = 0; i < _countof(kTitles); ++i)
+    {
+        size_t n = strlen(kTitles[i]);
+        if ((size_t)len >= n && strncmp(title, kTitles[i], n) == 0 &&
+            (title[n] == 0 || strncmp(title + n, "   [ speed ", 11) == 0))
+        {
+            *(HWND *)lp = hwnd;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
 static BOOL BorderFromLiveGame(RECT *out)
 {
-    static const char *kClasses[] = {"Red Alert 2", "Yuri's Revenge", "OpenRA"};
-
     HWND game = NULL;
-    for (int i = 0; i < _countof(kClasses) && !game; ++i)
-        game = FindWindowA(NULL, kClasses[i]);
+    EnumWindows(FindGameTitle, (LPARAM)&game);
     if (!game)
         return FALSE;
 
