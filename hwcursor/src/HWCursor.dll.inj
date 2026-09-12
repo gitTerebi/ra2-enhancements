@@ -4,5 +4,3 @@
 7B88B9 = WWMouse_SkipHideOnCreate, 7
 ; ShowCursor(0) inside WWMouseClass::Capture_Mouse
 7B9C0B = WWMouse_SkipHideOnCapture, 8
-; TacticalClass::CoordsToClient entry - per-frame main-thread cursor refresh
-6D2140 = Tactical_CursorTick, 8

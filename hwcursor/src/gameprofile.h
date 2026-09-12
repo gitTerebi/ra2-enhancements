@@ -74,6 +74,11 @@ inline bool HostIsGame()
 
 inline const GameProfile *DetectGame()
 {
+    static bool s_done;
+    static const GameProfile *s_game;
+    if (s_done)
+        return s_game;
+    s_done = true;
     if (!HostIsGame() || GetModuleHandleA(NULL) != (HMODULE)0x00400000)
         return NULL;
     for (int i = 0; i < _countof(kProfiles); ++i)
@@ -82,7 +87,7 @@ inline const GameProfile *DetectGame()
         if (IsBadReadPtr((const void *)p.earlyOut, p.detectLen))
             continue;
         if (memcmp((const void *)p.earlyOut, p.detectSig, p.detectLen) == 0)
-            return &p;
+            return s_game = &p;
     }
     return NULL;
 }

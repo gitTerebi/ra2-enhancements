@@ -14,6 +14,7 @@ struct CacheEntry
     void *shape;
     int frame, w, h, hx, hy;
     HCURSOR cursor;
+    DWORD lastUse;
 };
 
 static CacheEntry g_cache[256];
@@ -125,13 +126,19 @@ static HCURSOR BuildCursor(const BYTE *px, int w, int h, int hx, int hy)
     return cur;
 }
 
+static HCURSOR g_applied;
+static DWORD g_useClock;
+
 static HCURSOR CursorFor(void *shape, int frame, int w, int h, int hx, int hy)
 {
     for (int i = 0; i < g_cacheCount; ++i)
     {
         CacheEntry &e = g_cache[i];
         if (e.shape == shape && e.frame == frame && e.w == w && e.h == h && e.hx == hx && e.hy == hy)
+        {
+            e.lastUse = ++g_useClock;
             return e.cursor;
+        }
     }
 
     const BYTE *px = FramePixels(shape, frame);
@@ -142,13 +149,19 @@ static HCURSOR CursorFor(void *shape, int frame, int w, int h, int hx, int hy)
     if (!cur)
         return NULL;
 
+    int slot = g_cacheCount;
     if (g_cacheCount == _countof(g_cache))
     {
-        DestroyCursor(g_cache[0].cursor);
-        MoveMemory(g_cache, g_cache + 1, sizeof(g_cache) - sizeof(g_cache[0]));
-        --g_cacheCount;
+        slot = -1;
+        for (int i = 0; i < g_cacheCount; ++i)
+            if (g_cache[i].cursor != g_applied && (slot < 0 || g_cache[i].lastUse < g_cache[slot].lastUse))
+                slot = i;
+        DestroyCursor(g_cache[slot].cursor);
     }
-    CacheEntry &e = g_cache[g_cacheCount++];
+    else
+        ++g_cacheCount;
+    CacheEntry &e = g_cache[slot];
+    e.lastUse = ++g_useClock;
     e.shape = shape;
     e.frame = frame;
     e.w = w;
@@ -157,6 +170,61 @@ static HCURSOR CursorFor(void *shape, int frame, int w, int h, int hx, int hy)
     e.hy = hy;
     e.cursor = cur;
     return cur;
+}
+
+typedef int(WINAPI *ShowCursorProc)(BOOL);
+static PROC *g_showCursorSlot;
+static ShowCursorProc g_nextShowCursor;
+
+static int WINAPI IgnoreCursorHide(BOOL show)
+{
+    if (show)
+        return g_nextShowCursor(TRUE);
+    return -1;
+}
+
+static PROC *FindShowCursorImport()
+{
+    BYTE *exe = (BYTE *)GetModuleHandleA(NULL);
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(exe + ((IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    DWORD rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    if (!rva)
+        return NULL;
+    for (IMAGE_IMPORT_DESCRIPTOR *d = (IMAGE_IMPORT_DESCRIPTOR *)(exe + rva); d->FirstThunk; ++d)
+    {
+        if (!d->OriginalFirstThunk || _stricmp((char *)exe + d->Name, "user32.dll") != 0)
+            continue;
+        IMAGE_THUNK_DATA *names = (IMAGE_THUNK_DATA *)(exe + d->OriginalFirstThunk);
+        IMAGE_THUNK_DATA *slots = (IMAGE_THUNK_DATA *)(exe + d->FirstThunk);
+        for (; names->u1.AddressOfData; ++names, ++slots)
+        {
+            if (names->u1.Ordinal & IMAGE_ORDINAL_FLAG)
+                continue;
+            IMAGE_IMPORT_BY_NAME *ibn = (IMAGE_IMPORT_BY_NAME *)(exe + names->u1.AddressOfData);
+            if (strcmp((char *)ibn->Name, "ShowCursor") == 0)
+                return (PROC *)&slots->u1.Function;
+        }
+    }
+    return NULL;
+}
+
+static void KeepShowCursorPatched()
+{
+    if (!g_showCursorSlot && !(g_showCursorSlot = FindShowCursorImport()))
+        return;
+    PROC current = *g_showCursorSlot;
+    if (current == (PROC)IgnoreCursorHide)
+        return;
+    DWORD old;
+    if (!VirtualProtect(g_showCursorSlot, sizeof(PROC), PAGE_READWRITE, &old))
+        return;
+    g_nextShowCursor = (ShowCursorProc)current;
+    *g_showCursorSlot = (PROC)IgnoreCursorHide;
+    VirtualProtect(g_showCursorSlot, sizeof(PROC), old, &old);
+    CURSORINFO info = {sizeof(info)};
+    if (GetCursorInfo(&info) && !(info.flags & CURSOR_SHOWING))
+        while (g_nextShowCursor(TRUE) < 0)
+            ;
 }
 
 static LONG g_cursorBusy;
@@ -203,8 +271,8 @@ extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
         SetClassLongPtrA(g_wnd, GCLP_HCURSOR, (LONG_PTR)want);
         SetCursor(want);
     }
-    while (ShowCursor(TRUE) < 0)
-        ;
+    g_applied = want;
+    KeepShowCursorPatched();
     InterlockedExchange(&g_cursorBusy, 0);
 }
 
@@ -216,24 +284,6 @@ EXPORT_FUNC(WWMouse_SkipDraw)
         return 0;
     OnDrawMouse((BYTE *)(g_game->thisInEbx ? R->_EBX : R->_EAX));
     return g_game->earlyOut;
-}
-
-extern "C" __declspec(noinline) void __cdecl RefreshCursor()
-{
-    if (!g_game)
-        g_game = DetectGame();
-    if (!g_game || !g_game->mouseInstance)
-        return;
-    BYTE *self = *g_game->mouseInstance;
-    if (!self || IsBadReadPtr(self, 0x60))
-        return;
-    OnDrawMouse(self);
-}
-
-EXPORT_FUNC(Tactical_CursorTick)
-{
-    RefreshCursor();
-    return 0;
 }
 
 EXPORT_FUNC(WWMouse_SkipHideOnCreate)
@@ -322,18 +372,6 @@ static bool InstallInlineHook()
     return true;
 }
 
-static DWORD WINAPI TickThread(LPVOID)
-{
-    for (;;)
-    {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-        if (pid == GetCurrentProcessId())
-            RefreshCursor();
-        Sleep(8);
-    }
-}
-
 BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH)
@@ -345,7 +383,6 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
         g_game = DetectGame();
         if (!IsDebuggerPresent())
             InstallInlineHook();
-        CloseHandle(CreateThread(NULL, 0, TickThread, NULL, 0, NULL));
     }
     return TRUE;
 }
