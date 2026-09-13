@@ -349,6 +349,11 @@ static void *EscortFor(void *healer)
     return NULL;
 }
 
+static void ForgetEscorts()
+{
+    g_escortSelected = -1;
+}
+
 static void ForgetEscortsIfFirst(void *obj)
 {
     if (*g_healer->selectedCount > 0 && (*g_healer->selectedItems)[0] == obj)
@@ -534,6 +539,149 @@ static void InstallHealerEscort()
     WriteCallSite(h->clickSite, HealerClickedAction);
     WriteCallSite(h->cellSite, HealerCellClickedAction);
     SpeedLog("  healer escort ready at %X and %X", h->clickSite, h->cellSite);
+}
+
+typedef bool (__stdcall *LoadWrapFn)(const char *file);
+typedef bool (__stdcall *SaveWrapFn)(const char *file, const wchar_t *description);
+typedef void (__thiscall *FileCtorFn)(void *self, const char *file);
+typedef void (__thiscall *FileDtorFn)(void *self);
+typedef bool (__thiscall *FileAvailableFn)(void *self, int forced);
+
+struct SaveProfile
+{
+    const char *name;
+    DWORD confirmJump;
+    DWORD savedBox;
+    DWORD loadWrap;
+    DWORD saveWrap;
+    DWORD fileCtorCall;
+    DWORD fileCtor;
+    DWORD fileDtorCall;
+    DWORD fileDtor;
+    DWORD mouseInstance;
+    DWORD session;
+    DWORD sessionPauseCall;
+    DWORD sessionPause;
+    DWORD sessionResume;
+    DWORD sessionRunningOffset;
+};
+
+static const SaveProfile kSaves[] = {
+    {"gamemd", 0x00559353, 0x0055943A, 0x00559D60, 0x00559E40, 0x00559332, 0x0065CA80, 0x0055934C,
+     0x0065CA00, 0x00887640, 0x00A8B238, 0x00559DBC, 0x0069BB40, 0x0069BAB0, 0x30D8},
+    {"game", 0x0053BCE7, 0x0053BDCE, 0x0053C680, 0x0053C760, 0x0053BCC6, 0x00638B40, 0x0053BCE0,
+     0x00638AC0, 0x00839C68, 0x00A3D298, 0x0053C6DC, 0x00672E70, 0x00672DE0, 0x3080},
+};
+
+static const BYTE kConfirmJumpSig[4] = {0x74, 0x6A, 0x6A, 0x00};
+static const BYTE kSavedBoxSig[7] = {0x8B, 0x16, 0x8B, 0xCE, 0xFF, 0x52, 0x20};
+static const BYTE kLoadWrapSig[5] = {0x68, 0x1C, 0x04, 0x00, 0x00};
+static const BYTE kSaveWrapSig[5] = {0x68, 0x53, 0x04, 0x00, 0x00};
+static const char kQuickSaveFile[] = "QUICK.SAV";
+
+static const SaveProfile *g_save;
+
+static bool BytesAt(DWORD at, const BYTE *sig, size_t n)
+{
+    return !IsBadReadPtr((const void *)at, n) && memcmp((const void *)at, sig, n) == 0;
+}
+
+static bool WriteBytes(DWORD at, const BYTE *bytes, size_t n)
+{
+    DWORD old = 0;
+    if (!VirtualProtect((void *)at, n, PAGE_EXECUTE_READWRITE, &old))
+        return false;
+    memcpy((void *)at, bytes, n);
+    VirtualProtect((void *)at, n, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), (void *)at, n);
+    return true;
+}
+
+static void InstallSaveTweaks()
+{
+    const GameProfile *g = DetectGame();
+    if (!g)
+        return;
+    const SaveProfile *s = NULL;
+    for (int i = 0; i < _countof(kSaves); ++i)
+        if (strcmp(kSaves[i].name, g->name) == 0)
+            s = &kSaves[i];
+    if (!s)
+        return;
+
+    if (!BytesAt(s->confirmJump, kConfirmJumpSig, sizeof(kConfirmJumpSig)) ||
+        !BytesAt(s->savedBox, kSavedBoxSig, sizeof(kSavedBoxSig)))
+    {
+        SpeedLog("  save boxes: sites %X/%X unexpected, skipped", s->confirmJump, s->savedBox);
+    }
+    else
+    {
+        static const BYTE skipConfirm = 0xEB;
+        static const BYTE skipSaved[2] = {0xEB, 0x36};
+        WriteBytes(s->confirmJump, &skipConfirm, 1);
+        WriteBytes(s->savedBox, skipSaved, 2);
+        SpeedLog("  save boxes removed at %X and %X", s->confirmJump, s->savedBox);
+    }
+
+    if (!BytesAt(s->loadWrap + 0x10, kLoadWrapSig, sizeof(kLoadWrapSig)) ||
+        !BytesAt(s->saveWrap + 0x04, kSaveWrapSig, sizeof(kSaveWrapSig)) ||
+        !CallGoesTo(s->fileCtorCall, s->fileCtor) || !CallGoesTo(s->fileDtorCall, s->fileDtor))
+    {
+        SpeedLog("  quick save: wrappers %X/%X unexpected, skipped", s->loadWrap, s->saveWrap);
+        return;
+    }
+    // The load wrapper starts by reading this WWMouseClass instance.
+    static const BYTE mouseLoadSig[2] = {0x8B, 0x0D};
+    if (!BytesAt(s->loadWrap, mouseLoadSig, sizeof(mouseLoadSig)) ||
+        !BytesAt(s->loadWrap + 2, (const BYTE *)&s->mouseInstance, sizeof(s->mouseInstance)))
+        return;
+    BYTE runningTest[10] = {0x8A, 0x81, 0, 0, 0, 0, 0x84, 0xC0, 0x0F, 0x85};
+    memcpy(runningTest + 2, &s->sessionRunningOffset, 4);
+    if (!CallGoesTo(s->sessionPauseCall, s->sessionPause) ||
+        !BytesAt(s->sessionResume, runningTest, sizeof(runningTest)))
+    {
+        SpeedLog("  quick load: session resume %X unexpected, skipped", s->sessionResume);
+        return;
+    }
+    g_save = s;
+    SpeedLog("  quick save ready, F5 saves and F9 loads %s", kQuickSaveFile);
+}
+
+static bool QuickSaveExists()
+{
+    BYTE file[1024] = {0};
+    ((FileCtorFn)g_save->fileCtor)(file, kQuickSaveFile);
+    bool found = (*(FileAvailableFn **)file)[0x14 / 4](file, 0);
+    ((FileDtorFn)g_save->fileDtor)(file);
+    return found;
+}
+
+static bool g_quickSavePending;
+static bool g_quickLoadPending;
+
+static void RunPendingSaves(bool allowed)
+{
+    bool save = g_quickSavePending, load = g_quickLoadPending;
+    g_quickSavePending = g_quickLoadPending = false;
+    if (!g_save || !allowed)
+        return;
+    if (save)
+    {
+        bool ok = ((SaveWrapFn)g_save->saveWrap)(kQuickSaveFile, L"Quick Save");
+        SpeedLog("  quick save %s", ok ? "written" : "failed");
+    }
+    if (!load)
+        return;
+    if (!QuickSaveExists())
+    {
+        SpeedLog("  quick load: no %s yet", kQuickSaveFile);
+        return;
+    }
+    typedef void (__thiscall *SessionResumeFn)(void *session);
+    bool ok = ((LoadWrapFn)g_save->loadWrap)(kQuickSaveFile);
+    ((SessionResumeFn)g_save->sessionResume)((void *)g_save->session);
+    ForgetEscorts();
+    SpeedLog("  quick load %s", ok ? "done" : "failed");
 }
 
 struct SpeedProfile
@@ -779,28 +927,267 @@ static void ShowStep()
     SetWindowTextA(g_wnd, title);
 }
 
-static void PollSpeedKeys()
+static bool GameFocused()
 {
-    const int keys[2] = {VK_OEM_4, VK_OEM_6};
     DWORD pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-    bool focused = pid == GetCurrentProcessId();
+    return pid == GetCurrentProcessId();
+}
+
+static void StepSpeed(int dir)
+{
+    int next = g_step + dir;
+    if (next >= 0 && next < _countof(kSteps))
+    {
+        g_step = next;
+        SaveStep();
+        SpeedLog("  step -> %s (%d fps)", kSteps[g_step].label, kSteps[g_step].fps);
+    }
+    ShowStep();
+}
+
+static void PollSpeedKeys(bool focused)
+{
+    const int keys[2] = {VK_OEM_4, VK_OEM_6};
     for (int i = 0; i < 2; ++i)
     {
         bool down = focused && (GetAsyncKeyState(keys[i]) & 0x8000) != 0;
         if (down && !g_prevDown[i])
-        {
-            int next = g_step + (i ? 1 : -1);
-            if (next >= 0 && next < _countof(kSteps))
-            {
-                g_step = next;
-                SaveStep();
-                SpeedLog("  step -> %s (%d fps)", kSteps[g_step].label, kSteps[g_step].fps);
-            }
-            ShowStep();
-        }
+            StepSpeed(i ? 1 : -1);
         g_prevDown[i] = down;
     }
+}
+
+enum { WWKEY_RELEASE = 0x800 };
+enum { CMD_SPEED_DOWN, CMD_SPEED_UP, CMD_QUICK_SAVE, CMD_QUICK_LOAD };
+
+static const wchar_t *g_commandCategory = L"Interface";
+static bool g_commandsReady;
+
+static bool PacedMode()
+{
+    return g_gameMode && (*g_gameMode == GAMEMODE_CAMPAIGN || *g_gameMode == GAMEMODE_SKIRMISH);
+}
+
+class ModCommand
+{
+public:
+    ModCommand(int action, const char *name, const wchar_t *uiName, const wchar_t *description)
+        : m_action(action), m_name(name), m_uiName(uiName), m_description(description) {}
+    virtual ~ModCommand() {}
+    virtual const char *GetName() const { return m_name; }
+    virtual const wchar_t *GetUIName() const { return m_uiName; }
+    virtual const wchar_t *GetUICategory() const { return g_commandCategory; }
+    virtual const wchar_t *GetUIDescription() const { return m_description; }
+    virtual bool PreventCombinationOverride(int) const { return false; }
+    virtual bool ExtraTriggerCondition(int key) const { return !(key & WWKEY_RELEASE); }
+    virtual bool CheckLoop(int) const { return false; }
+    virtual void Execute(int) const
+    {
+        switch (m_action)
+        {
+        case CMD_SPEED_DOWN:
+        case CMD_SPEED_UP:
+            if (PacedMode())
+                StepSpeed(m_action == CMD_SPEED_UP ? 1 : -1);
+            break;
+        case CMD_QUICK_SAVE:
+            g_quickSavePending = true;
+            break;
+        case CMD_QUICK_LOAD:
+            g_quickLoadPending = true;
+            break;
+        }
+    }
+
+private:
+    int m_action;
+    const char *m_name;
+    const wchar_t *m_uiName;
+    const wchar_t *m_description;
+};
+
+struct CommandSpec
+{
+    int action;
+    const char *name;
+    const wchar_t *uiName;
+    const wchar_t *description;
+    int defaultKey;
+};
+
+static const CommandSpec kCommandSpecs[] = {
+    {CMD_QUICK_SAVE, "QuickSave", L"Quick Save", L"Save the mission to QUICK.SAV.", VK_F5},
+    {CMD_QUICK_LOAD, "QuickLoad", L"Quick Load", L"Load the mission from QUICK.SAV.", VK_F9},
+    {CMD_SPEED_DOWN, "GameSpeedDown", L"Game Speed Down", L"Slow the game down one step.", VK_OEM_4},
+    {CMD_SPEED_UP, "GameSpeedUp", L"Game Speed Up", L"Speed the game up one step.", VK_OEM_6},
+};
+
+static ModCommand *g_commands[_countof(kCommandSpecs)];
+
+struct CommandVector
+{
+    void **vtable;
+    void **items;
+    int capacity;
+    bool isReference;
+    bool isAllocated;
+    int count;
+    int capacityIncrement;
+};
+
+typedef bool (__thiscall *SetCapacityFn)(CommandVector *self, int capacity, void **existing);
+typedef const char *(__thiscall *CommandNameFn)(void *cmd);
+typedef const wchar_t *(__thiscall *CommandCategoryFn)(void *cmd);
+
+struct CommandProfile
+{
+    const char *name;
+    DWORD keyboardLoad;
+    CommandVector *commands;
+    const char *keyboardIni;
+};
+
+static const CommandProfile kCommands[] = {
+    {"gamemd", 0x00533D20, (CommandVector *)0x0087F658, "KeyboardMD.ini"},
+    {"game", 0x00519240, (CommandVector *)0x00832358, "Keyboard.ini"},
+};
+
+static const CommandProfile *g_commandProfile;
+
+static bool HasCommand(const CommandVector *v, const void *cmd)
+{
+    for (int i = 0; cmd && i < v->count; ++i)
+        if (v->items[i] == cmd)
+            return true;
+    return false;
+}
+
+static bool AddCommand(CommandVector *v, void *cmd)
+{
+    if (v->count >= v->capacity)
+    {
+        if ((!v->isAllocated && v->capacity) || v->capacityIncrement <= 0)
+            return false;
+        SetCapacityFn grow = (SetCapacityFn)v->vtable[2];
+        if (!grow(v, v->capacity + v->capacityIncrement, NULL))
+            return false;
+    }
+    v->items[v->count++] = cmd;
+    return true;
+}
+
+static void SeedDefaultKeys()
+{
+    char ini[MAX_PATH];
+    if (!BesideExe(g_commandProfile->keyboardIni, ini, sizeof(ini)) ||
+        GetFileAttributesA(ini) == INVALID_FILE_ATTRIBUTES)
+        return;
+
+    char section[8192];
+    DWORD len = GetPrivateProfileSectionA("Hotkey", section, sizeof(section), ini);
+    if (len == 0 || len >= sizeof(section) - 2)
+        return;
+
+    for (int c = 0; c < _countof(kCommandSpecs); ++c)
+    {
+        const CommandSpec &spec = kCommandSpecs[c];
+        const char *name = spec.name;
+        if (GetPrivateProfileIntA("Hotkey", name, -1, ini) != -1)
+            continue;
+        for (const char *entry = section; *entry; entry += strlen(entry) + 1)
+        {
+            const char *eq = strchr(entry, '=');
+            if (!eq || atoi(eq + 1) != spec.defaultKey)
+                continue;
+            char other[128];
+            size_t n = eq - entry;
+            if (n >= sizeof(other))
+                continue;
+            memcpy(other, entry, n);
+            other[n] = 0;
+            WritePrivateProfileStringA("Hotkey", other, "0", ini);
+            SpeedLog("  unbound %s from key %d for %s", other, spec.defaultKey, name);
+        }
+        char value[16];
+        wsprintfA(value, "%d", spec.defaultKey);
+        WritePrivateProfileStringA("Hotkey", name, value, ini);
+    }
+}
+
+static void __cdecl RegisterCommands()
+{
+    CommandVector *v = g_commandProfile->commands;
+    for (int i = 0; i < v->count; ++i)
+    {
+        void *cmd = v->items[i];
+        if (cmd && strcmp((*(CommandNameFn **)cmd)[1](cmd), "Options") == 0)
+            g_commandCategory = (*(CommandCategoryFn **)cmd)[3](cmd);
+    }
+    int ready = 0;
+    for (int c = 0; c < _countof(kCommandSpecs); ++c)
+    {
+        if (HasCommand(v, g_commands[c]))
+        {
+            ++ready;
+            continue;
+        }
+        const CommandSpec &spec = kCommandSpecs[c];
+        ModCommand *cmd = new ModCommand(spec.action, spec.name, spec.uiName, spec.description);
+        if (AddCommand(v, cmd))
+        {
+            g_commands[c] = cmd;
+            ++ready;
+        }
+        else
+        {
+            delete cmd;
+        }
+    }
+    if (!g_commandsReady)
+        SeedDefaultKeys();
+    g_commandsReady = ready == _countof(kCommandSpecs);
+    SpeedLog("  commands registered %d of %d", ready, _countof(kCommandSpecs));
+}
+
+static void InstallCommands()
+{
+    const GameProfile *g = DetectGame();
+    if (!g)
+        return;
+    const CommandProfile *p = NULL;
+    for (int i = 0; i < _countof(kCommands); ++i)
+        if (strcmp(kCommands[i].name, g->name) == 0)
+            p = &kCommands[i];
+    if (!p)
+        return;
+
+    BYTE want[6] = {0x81, 0xEC};
+    *(DWORD *)(want + 2) = strcmp(p->name, "gamemd") == 0 ? 0xCC : 0xBC;
+    if (!BytesAt(p->keyboardLoad, want, sizeof(want)))
+    {
+        SpeedLog("  commands: keyboard load %X unexpected, skipped", p->keyboardLoad);
+        return;
+    }
+    if (!g_stubs)
+    {
+        g_stubs = (BYTE *)VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!g_stubs)
+            return;
+        g_stubEnd = g_stubs;
+    }
+    g_commandProfile = p;
+
+    BYTE *stub = g_stubEnd;
+    EmitByte(0x60);
+    EmitByte(0x9C);
+    EmitCallAbs(RegisterCommands);
+    EmitByte(0x9D);
+    EmitByte(0x61);
+    Emit(want, sizeof(want));
+    EmitJmp(p->keyboardLoad + sizeof(want));
+    if (WriteJmp(p->keyboardLoad, sizeof(want), stub))
+        SpeedLog("  commands hook ready at %X", p->keyboardLoad);
 }
 
 static LONGLONG g_qpcFreq;
@@ -986,10 +1373,13 @@ static void __cdecl AlternateDelay()
     if (!paced)
     {
         g_nextFrame = 0;
+        RunPendingSaves(false);
         NetworkScrollWait();
         return;
     }
-    PollSpeedKeys();
+    if (!g_commandsReady)
+        PollSpeedKeys(GameFocused());
+    RunPendingSaves(mode == GAMEMODE_CAMPAIGN);
 
     *g_delaySlot = 0;
     PaceFrame(kSteps[g_step].fps);
@@ -1112,6 +1502,8 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
             return TRUE;
         InstallInline();
         InstallHealerEscort();
+        InstallSaveTweaks();
+        InstallCommands();
     }
     return TRUE;
 }

@@ -25,6 +25,17 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   as a Ctrl+Alt escort. Healers are spread evenly across the width of the army, so each
   armed unit gets its share and each healer stays on its own flank. This covers normal
   attacks, force attack on buildings and units, and force fire on empty ground.
+- **Quick save and quick load.** In a campaign mission, F5 saves to `QUICK.SAV` and F9 loads
+  it. Both call the same code as the Save and Load buttons, so the file also shows up in the
+  Load menu as "Quick Save". The Save menu no longer asks before overwriting a save, and no
+  longer shows a "Game saved" box afterwards. Vanilla `game.exe` and `gamemd.exe` only;
+  under Syringe (Mental Omega) the DLL leaves saving alone.
+- **Real hotkey commands.** Quick Save, Quick Load, Game Speed Down and Game Speed Up are
+  added to the game's own command list, so they sit in the Keyboard options menu and in
+  `[Hotkey]` in `Keyboard.ini` / `KeyboardMD.ini` like any stock command. The game delivers
+  their key presses, so none are missed. On the first launch the DLL binds them to F5, F9,
+  `[` and `]`, and unbinds whatever stock command held those keys (Taunt 1 and Taunt 5 by
+  default). Under Syringe the speed keys fall back to polling `[` and `]`.
 
 Pairs with [`hwcursor`](../hwcursor) in this repo, which adds a hardware mouse cursor and
 WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
