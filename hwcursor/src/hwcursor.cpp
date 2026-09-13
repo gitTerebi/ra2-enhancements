@@ -336,6 +336,11 @@ static void InstallCursorHook()
         return;
     g_earlyOut = g_game->earlyOut;
     WriteJmp(g_game->hook, g_game->thisInEbx ? (void *)StubEbx : (void *)StubEax);
+    if (strcmp(g_game->name, "gamemd") == 0)
+    {
+        WriteJmp(0x007B88B9, (void *)0x007B88C0, 7);
+        WriteJmp(0x007B9C0B, (void *)0x007B9C13, 8);
+    }
 }
 
 static void InstallAll()
