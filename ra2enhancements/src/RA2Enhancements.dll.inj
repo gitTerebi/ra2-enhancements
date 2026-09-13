@@ -11,8 +11,10 @@
 7324A0 = CombatantSelect_SelectOne, A
 7324AF = CombatantSelect_LoopDone, 5
 ;
-; Healers (negative CombatDamage) whose own action on the clicked target is
-; None/Move/NoMove/0x3B get Area Guard on the nearest selected armed unit
-; instead of ClickedAction, so a Repair IFV escorts the group rather than
-; driving at the enemy.
+; Healers (negative CombatDamage) skip ClickedAction when the group attacks,
+; or when their own action on the target is None/Move/NoMove/0x3B. They get
+; Area Guard on an armed unit from the selection instead, spread evenly across
+; the line of the army, so a Repair IFV escorts rather than driving at the enemy.
+; 4AE844 is the object click loop, 4AE927 the ground click loop.
 4AE844 = HealerEscort_ClickedAction, 6
+4AE927 = HealerEscort_CellClickedAction, 6

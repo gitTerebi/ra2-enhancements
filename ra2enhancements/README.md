@@ -18,12 +18,13 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   commands.
 - **Shift-queue five.** Shift-click a sidebar cameo to queue 5 of that unit, shift
   right-click to remove 5.
-- **Healers escort the group.** When a selection attacks an enemy, the stock game sends a
-  Repair IFV straight at the target, because the vehicle order code treats "can't act on
-  this" as a move. Medics already got Area Guard instead. Now every healer in the selection
-  (any foot unit whose weapon does negative damage) gets Area Guard anchored on the nearest
-  selected armed unit, the same order as a Ctrl+Alt escort. Healers trail the army and
-  repair it, and armed units attack as before.
+- **Healers escort the group.** When a selection attacks, the stock game sends a Repair
+  IFV straight at the target, because the vehicle order code treats "can't act on this" as a
+  move. Now every healer in the selection (any vehicle or infantry whose weapon does negative
+  damage) gets Area Guard anchored on an armed unit from the same selection, the same order
+  as a Ctrl+Alt escort. Healers are spread evenly across the width of the army, so each
+  armed unit gets its share and each healer stays on its own flank. This covers normal
+  attacks, force attack on buildings and units, and force fire on empty ground.
 
 Pairs with [`hwcursor`](../hwcursor) in this repo, which adds a hardware mouse cursor and
 WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
@@ -110,6 +111,7 @@ three levels above this folder.
 | --- | --- |
 | `src/gameprofile.h` | game detection, the per-exe address table, and which ini each game reads |
 | `src/ra2enhancements.cpp` | the DLL: select sites, speed pacer hook, sidebar queue hook, healer escort hook, Syringe exports |
+| `src/escort.h` | pairs healers with armed units across the width of the army |
 | `src/RA2Enhancements.dll.inj` | Syringe hook list, `gamemd.exe` only |
 
 The DLL patches the game itself when the `dsound.dll` proxy loads it, and stands down under
