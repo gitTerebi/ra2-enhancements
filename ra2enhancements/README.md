@@ -25,11 +25,19 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   as a Ctrl+Alt escort. Healers are spread evenly across the width of the army, so each
   armed unit gets its share and each healer stays on its own flank. This covers normal
   attacks, force attack on buildings and units, and force fire on empty ground.
-- **Quick save and quick load.** In a campaign mission, F5 saves to `QUICK.SAV` and F9 loads
-  it. Both call the same code as the Save and Load buttons, so the file also shows up in the
-  Load menu as "Quick Save". The Save menu no longer asks before overwriting a save, and no
+- **Quick save and quick load.** In a campaign mission, F5 saves over the older of `QUICK.SAV`
+  and `QUICK2.SAV`, and F9 loads the newer one. If one quick save is ever damaged, the other
+  still holds the save before it. Both keys call the same code as the Save and Load buttons,
+  and they run at the same point in the frame, so the files also show up in the Load menu as
+  "Quick Save" and "Quick Save 2". F9 also works on the main menu, where it loads the newer
+  quick save straight away. The Save menu no longer asks before overwriting a save, and no
   longer shows a "Game saved" box afterwards. Vanilla `game.exe` and `gamemd.exe` only;
   under Syringe (Mental Omega) the DLL leaves saving alone.
+- **Old quick saves heal themselves.** An earlier build saved on F5 in the middle of a frame,
+  after some particles had died but before the game deleted them. Those saves hold leaked
+  particles, and once their particle system is gone a later save crashes on load. Before every
+  save the DLL now deletes leaked particles and clears pointers to deleted particle systems, and
+  a quick load clears any broken pointers it still finds in an older save.
 - **Real hotkey commands.** Quick Save, Quick Load, Game Speed Down and Game Speed Up are
   added to the game's own command list, so they sit in the Keyboard options menu and in
   `[Hotkey]` in `Keyboard.ini` / `KeyboardMD.ini` like any stock command. The game delivers
