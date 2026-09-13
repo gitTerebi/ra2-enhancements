@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <stdio.h>
 #include "gameprofile.h"
 #include "escort.h"
 
@@ -812,6 +813,38 @@ typedef LONGLONG (__cdecl *ScrollRenderCostFn)();
 static RenderScrollFrameFn g_renderScrollFrame;
 static ScrollRenderDueFn g_scrollRenderDue;
 static ScrollRenderCostFn g_scrollRenderCost;
+static FILE *g_paceTrace;
+static int g_paceTraceLines;
+static int g_scrollDraws, g_scrollSkips;
+
+static void OpenPaceTrace()
+{
+    static bool s_checked;
+    if (s_checked)
+        return;
+    s_checked = true;
+    char ini[MAX_PATH], path[MAX_PATH], value[16];
+    if (!BesideExe("ddraw.ini", ini, sizeof(ini)) || !BesideExe("pacetrace.csv", path, sizeof(path)))
+        return;
+    GetPrivateProfileStringA("ddraw", "frametrace", "", value, sizeof(value), ini);
+    if (lstrcmpiA(value, "true") != 0 && lstrcmpA(value, "1") != 0)
+        return;
+    g_paceTrace = fopen(path, "w");
+    if (!g_paceTrace)
+        return;
+    setvbuf(g_paceTrace, NULL, _IOFBF, 1 << 16);
+    fprintf(g_paceTrace, "entry,deadline,period,reset,draws,skips,cost,exit\n");
+}
+
+static void PaceTrace(LONGLONG entry, LONGLONG deadline, LONGLONG period, bool reset, LONGLONG exit)
+{
+    if (!g_paceTrace)
+        return;
+    fprintf(g_paceTrace, "%lld,%lld,%lld,%d,%d,%d,%lld,%lld\n", entry, deadline, period, reset ? 1 : 0,
+            g_scrollDraws, g_scrollSkips, g_scrollRenderCost ? g_scrollRenderCost() : 0, exit);
+    if (++g_paceTraceLines % 200 == 0)
+        fflush(g_paceTrace);
+}
 
 static void FindScrollRenderer()
 {
@@ -882,11 +915,14 @@ static void ScrollDrawsUntil(LONGLONG deadline, LARGE_INTEGER &now, PollFn poll)
         if (due <= now.QuadPart && !stalled && now.QuadPart < deadline - cost)
         {
             LONGLONG before = now.QuadPart;
+            ++g_scrollDraws;
             g_renderScrollFrame();
             QueryPerformanceCounter(&now);
             stalled = now.QuadPart - before < instant && g_scrollRenderDue(now.QuadPart) <= now.QuadPart;
             continue;
         }
+        if (due <= now.QuadPart && !stalled)
+            ++g_scrollSkips;
         LONGLONG wake = due > now.QuadPart && due < deadline - cost ? due : deadline;
         if (poll && wake > now.QuadPart + g_qpcFreq / 500)
             wake = now.QuadPart + g_qpcFreq / 500;
@@ -903,16 +939,22 @@ static void PaceFrame(int fps)
 
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
+    OpenPaceTrace();
+    LONGLONG entry = now.QuadPart;
+    g_scrollDraws = g_scrollSkips = 0;
 
     if (g_pacedStep != g_step || g_nextFrame == 0 ||
         now.QuadPart - g_nextFrame > period || g_nextFrame - now.QuadPart > period * 4)
     {
         g_pacedStep = g_step;
+        PaceTrace(entry, g_nextFrame, period, true, entry);
         g_nextFrame = now.QuadPart + period;
         return;
     }
 
+    LONGLONG deadline = g_nextFrame;
     ScrollDrawsUntil(g_nextFrame, now, NULL);
+    PaceTrace(entry, deadline, period, false, now.QuadPart);
     g_nextFrame += period;
 }
 

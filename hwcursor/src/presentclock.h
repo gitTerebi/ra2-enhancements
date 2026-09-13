@@ -13,12 +13,35 @@ namespace PresentClock
     static LONGLONG g_refreshedAt;
     static LONGLONG g_renderedTarget;
     static HRESULT(WINAPI *g_getTiming)(HWND, DWM_TIMING_INFO *);
+    static bool g_monitorChecked;
+    static bool g_fixedPeriod;
 
     inline LONGLONG Now()
     {
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);
         return now.QuadPart;
+    }
+
+    inline void CheckMonitor()
+    {
+        HWND wnd = GetForegroundWindow();
+        DWORD pid = 0;
+        GetWindowThreadProcessId(wnd, &pid);
+        if (pid != GetCurrentProcessId())
+            return;
+        g_monitorChecked = true;
+        MONITORINFOEXA info;
+        info.cbSize = sizeof(info);
+        if (!GetMonitorInfoA(MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST), &info) ||
+            (info.dwFlags & MONITORINFOF_PRIMARY))
+            return;
+        DEVMODEA mode = {};
+        mode.dmSize = sizeof(mode);
+        if (!EnumDisplaySettingsA(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) || mode.dmDisplayFrequency <= 1)
+            return;
+        g_period = g_freq / mode.dmDisplayFrequency;
+        g_fixedPeriod = true;
     }
 
     inline void Refresh(LONGLONG now)
@@ -37,7 +60,9 @@ namespace PresentClock
         if (g_refreshedAt && now - g_refreshedAt < g_freq / 4)
             return;
         g_refreshedAt = now;
-        if (!g_getTiming)
+        if (!g_monitorChecked)
+            CheckMonitor();
+        if (g_fixedPeriod || !g_getTiming)
             return;
         DWM_TIMING_INFO info = {0};
         info.cbSize = sizeof(info);
@@ -63,7 +88,7 @@ namespace PresentClock
     static int g_costNext;
     static int g_divisor = 1;
     static LONGLONG g_fasterSince;
-    static LONGLONG g_slowCost;
+    static LONGLONG g_renderBudget;
 
     inline void RecordCost(LONGLONG cost, LONGLONG now)
     {
@@ -83,9 +108,9 @@ namespace PresentClock
                 sorted[j] = sorted[j - 1];
                 sorted[j - 1] = t;
             }
-        LONGLONG slow = sorted[g_costCount * 9 / 10] + g_freq / 2000;
-        g_slowCost = slow;
-        int wanted = (int)((slow + g_period - 1) / g_period);
+        LONGLONG typical = sorted[g_costCount / 2] + g_freq / 2000;
+        g_renderBudget = typical * 3 / 2;
+        int wanted = (int)((typical + g_period - 1) / g_period);
         if (wanted < 1)
             wanted = 1;
         if (wanted > kMaxDivisor)

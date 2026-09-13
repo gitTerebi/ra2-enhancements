@@ -81,7 +81,7 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         (*(Method **)map)[0x3C / 4](map);
         PresentClock::RecordCost(QpcNow() - start, start);
     }
-    CamTrace(0, start, moved);
+    CamTrace(rightMoved ? 2 : 0, start, moved);
     g_rendering = false;
 }
 
@@ -109,7 +109,7 @@ extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderDue(LONGLONG now)
 
 extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderCost()
 {
-    return PresentClock::g_slowCost;
+    return PresentClock::g_renderBudget;
 }
 
 static const GameProfile *Game()

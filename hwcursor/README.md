@@ -85,10 +85,14 @@ The hook validates the function signature and preserves CPU and floating-point
 state. It is installed during DLL loading; if validation fails, WASD scrolling is
 off. Its one Syringe hook runs once at startup and only makes Syringe load the DLL.
 With `RA2Enhancements.dll` installed, the simulation limiter also calls
-`RenderScrollFrame` during its wait, targeting 240 camera updates per second while
-WASD or a right-button drag moves the map. Each update uses the game's idle-render sequence, without
-dispatching gameplay input or advancing the simulation. Actual redraw rate depends
-on rendering cost. Right-button scrolling reuses the native drag threshold, capture,
+`RenderScrollFrame` during its wait while WASD or a right-button drag moves the map.
+It aims for one camera update per monitor refresh, timed from the DWM vblank clock.
+If DWM timing is unavailable, it falls back to 240 updates per second.
+DWM reports only the primary display, so on another monitor the camera uses that
+monitor's refresh rate without vblank alignment. Each update
+uses the game's idle-render sequence, without dispatching gameplay input or advancing
+the simulation. When a redraw takes longer than one refresh, the camera updates on
+every second refresh, then every third, and so on up to every eighth. Right-button scrolling reuses the native drag threshold, capture,
 cursor and scroll settings. WASD and continuous right-drag scrolling share the
 in-game Scroll Rate slider: slowest to fastest is 600, 900, 1200, 1500, 1800,
 2100 and 2400 pixels/second. The middle position is 1500 pixels/second, with
