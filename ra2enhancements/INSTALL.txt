@@ -62,7 +62,7 @@ https://github.com/gitTerebi/cnc-ddraw-ra2
 Files
 -----
 RA2Enhancements.dll      engine fixes and speed keys, both load paths
-RA2Enhancements.dll.inj  Syringe hook list for the above (gamemd.exe only)
+RA2Enhancements.dll.inj  one Syringe hook that installs the above (gamemd.exe only)
 
 32-bit only, matching the game. Built with the VS 2022 x86 toolset.
 MIT licensed. Not affiliated with or endorsed by EA.

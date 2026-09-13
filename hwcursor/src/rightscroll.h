@@ -5,6 +5,7 @@
 #include <limits.h>
 #include "scrollspeed.h"
 #include "presentclock.h"
+#include "patchguard.h"
 
 namespace RightScroll
 {
@@ -126,19 +127,13 @@ namespace RightScroll
                 sites[i] + 5 + *(const DWORD *)(site + 1) != originals[i])
                 return false;
         }
-        DWORD old;
-        SIZE_T size = p.vertical + 5 - p.caller;
-        if (!VirtualProtect((void *)p.caller, size, PAGE_EXECUTE_READWRITE, &old))
-            return false;
+        for (int i = 0; i < 3; ++i)
+            if (!WriteCall(sites[i], (const void *)replacements[i]))
+                return false;
         LARGE_INTEGER frequency;
         QueryPerformanceFrequency(&frequency);
         g_frequency = (double)frequency.QuadPart;
         g_profile = &p;
-        for (int i = 0; i < 3; ++i)
-            *(DWORD *)(sites[i] + 1) = replacements[i] - (sites[i] + 5);
-        DWORD ignored;
-        VirtualProtect((void *)p.caller, size, old, &ignored);
-        FlushInstructionCache(GetCurrentProcess(), (void *)p.caller, size);
         return true;
     }
 }

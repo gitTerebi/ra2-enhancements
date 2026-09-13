@@ -169,22 +169,34 @@ static void InstallScrollHook()
         return;
 
     g_scrollResume = g->scrollHook + 5;
-
-    BYTE patch[5];
-    patch[0] = 0xE9;
-    *(DWORD *)(patch + 1) = (DWORD)ScrollStub - (g->scrollHook + 5);
-
-    DWORD old = 0;
-    if (!VirtualProtect((void *)g->scrollHook, 5, PAGE_EXECUTE_READWRITE, &old))
-        return;
-    memcpy((void *)g->scrollHook, patch, 5);
-    VirtualProtect((void *)g->scrollHook, 5, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), (void *)g->scrollHook, 5);
-    g_scrollHooked = true;
+    WriteJmp(g->scrollHook, ScrollStub);
 }
 
-EXPORT_FUNC(WasdScroll_Loaded)
+static void InstallRightScroll()
 {
+    RightScroll::Install(strcmp(g_game->name, "gamemd") == 0);
+}
+
+static void InstallAll()
+{
+    static bool s_done;
+    if (s_done || !HostIsGame())
+        return;
+    s_done = true;
+    if (!InstallPatch("WASD scroll", InstallScrollHook))
+        return;
+    g_scrollHooked = true;
+    OpenCamTrace();
+    ScrollSpeed::g_rate = (const int *)(strcmp(g_game->name, "gamemd") == 0 ? 0xA8EB70 : 0xA40B24);
+    if (!InstallPatch("right-drag scroll", InstallRightScroll))
+        RightScroll::g_profile = NULL;
+    SpeedLog("  WASD scroll ready at %X, right-drag scroll %s", g_game->scrollHook,
+             RightScroll::g_profile ? "ready" : "off");
+}
+
+EXPORT_FUNC(WasdScroll_Install)
+{
+    InstallAll();
     return 0;
 }
 
@@ -193,17 +205,8 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(mod);
-        if (!HostIsGame())
-            return TRUE;
-        // Install while the loading thread is stopped, before gameplay starts.
-        InstallScrollHook();
-        if (g_scrollHooked)
-        {
-            OpenCamTrace();
-            ScrollSpeed::g_rate = (const int *)(strcmp(g_game->name, "gamemd") == 0 ?
-                                               0xA8EB70 : 0xA40B24);
-            RightScroll::Install(strcmp(g_game->name, "gamemd") == 0);
-        }
+        if (!IsDebuggerPresent())
+            InstallAll();
     }
     return TRUE;
 }

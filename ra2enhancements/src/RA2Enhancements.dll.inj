@@ -1,20 +1,3 @@
-; gamemd.exe 1.001 only (Syringe path). game.exe is handled by the inline
-; patch when loaded through dsound.dll.
-;
-; TypeSelect (T, whole map) and CombatantSelect (Q) loop over every matching
-; unit and call TechnoClass::Select without clearing AllowVoice (0x822CF2),
-; so every unit shouts VoiceSelect at once. Team select and band-box clear it
-; after the first unit. SelectOne replaces the "call [vt+14C]" in the loop,
-; makes the call itself, then clears AllowVoice; LoopDone re-arms it.
-732B3D = TypeSelect_SelectOne, A
-732B4C = TypeSelect_LoopDone, 5
-7324A0 = CombatantSelect_SelectOne, A
-7324AF = CombatantSelect_LoopDone, 5
-;
-; Healers (negative CombatDamage) skip ClickedAction when the group attacks,
-; or when their own action on the target is None/Move/NoMove/0x3B. They get
-; Area Guard on an armed unit from the selection instead, spread evenly across
-; the line of the army, so a Repair IFV escorts rather than driving at the enemy.
-; 4AE844 is the object click loop, 4AE927 the ground click loop.
-4AE844 = HealerEscort_ClickedAction, 6
-4AE927 = HealerEscort_CellClickedAction, 6
+; gamemd.exe 1.001 only. Early in WinMain, after Syringe has written every mod's hooks and
+; before the game loads its hotkeys. RA2Enhancements installs all of its patches from here.
+6BB9A5 = RA2Enhancements_Install, 5

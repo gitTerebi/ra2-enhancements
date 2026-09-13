@@ -29,8 +29,10 @@ keys.
 
 On Mental Omega, and anything else running Syringe, you do not need `dsound.dll`. Syringe
 scans `*.dll` in the game folder and picks up the matching `.inj` file, so copy the DLL
-and its `.inj` together. Each DLL detects Syringe and stands down, which lets one binary
-serve both load paths.
+and its `.inj` together. Each `.inj` holds one hook early in WinMain, and each DLL installs
+its patches from that hook, after Syringe has written every other mod's hooks. One binary
+serves both load paths, and deleting any DLL leaves the others working. Syringe ignores an
+`.inj` whose DLL is gone.
 
 `RA2Video.exe` is a standalone tool. It edits ini files and never loads into the game, so
 it does not care which of the above you use. It does assume you render through
@@ -55,9 +57,10 @@ Verified against Steam Yuri's Revenge 1.001 (`gamemd.exe`) and Red Alert 2 (`gam
 and against Mental Omega via Syringe 0.7.3.0.
 
 Every DLL checks the exe it lands in and refuses to patch anything it does not recognise,
-so a mismatched build no-ops rather than crashing. It confirms the exe by matching bytes
-at an address nothing else patches, never at a hook site, because under Syringe the bytes
-at a hook site are already Syringe's.
+so a mismatched build no-ops rather than crashing. All three DLLs write game code through
+`shared/patchguard.cpp`. Before every write, it compares the bytes in memory with the exe on
+disk. If another mod already changed a site, that feature stays off, `campaignspeed.log`
+names the site, and every other feature still installs.
 
 **Multiplayer:** the cursor, the scrolling and the select-all voice fix do not touch game
 logic, units, or the network protocol. The speed keys do not either, but they change how

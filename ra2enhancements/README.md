@@ -25,14 +25,15 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   as a Ctrl+Alt escort. Healers are spread evenly across the width of the army, so each
   armed unit gets its share and each healer stays on its own flank. This covers normal
   attacks, force attack on buildings and units, and force fire on empty ground.
-- **Quick save and quick load.** In a campaign mission, F5 saves over the older of `QUICK.SAV`
-  and `QUICK2.SAV`, and F9 loads the newer one. If one quick save is ever damaged, the other
-  still holds the save before it. Both keys call the same code as the Save and Load buttons,
-  and they run at the same point in the frame, so the files also show up in the Load menu as
-  "Quick Save" and "Quick Save 2". F9 also works on the main menu, where it loads the newer
-  quick save straight away. The Save menu no longer asks before overwriting a save, and no
-  longer shows a "Game saved" box afterwards. Vanilla `game.exe` and `gamemd.exe` only;
-  under Syringe (Mental Omega) the DLL leaves saving alone.
+- **Quick save and quick load.** In a campaign mission or a skirmish game, F5 saves over the
+  older of `QUICK.SAV` and `QUICK2.SAV`, and F9 loads the newer one. If one quick save is ever
+  damaged, the other still holds the save before it. Both keys call the same code as the Save
+  and Load buttons, and they run at the same point in the frame, so the files also show up in
+  the Load menu as "Quick Save" and "Quick Save 2". F9 also works on the main menu, where it
+  loads the newer quick save straight away. The Save menu no longer asks before overwriting a
+  save, and no longer shows a "Game saved" box afterwards. This works in Mental Omega too. Its
+  CnCNet spawner moves every save into `Saved Games\`, so the quick saves sit there, and F9
+  looks in whatever folder the Load menu lists.
 - **Old quick saves heal themselves.** An earlier build saved on F5 in the middle of a frame,
   after some particles had died but before the game deleted them. Those saves hold leaked
   particles, and once their particle system is gone a later save crashes on load. Before every
@@ -43,7 +44,7 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   `[Hotkey]` in `Keyboard.ini` / `KeyboardMD.ini` like any stock command. The game delivers
   their key presses, so none are missed. On the first launch the DLL binds them to F5, F9,
   `[` and `]`, and unbinds whatever stock command held those keys (Taunt 1 and Taunt 5 by
-  default). Under Syringe the speed keys fall back to polling `[` and `]`.
+  default). Mental Omega reads the same `KeyboardMD.ini` as Yuri's Revenge.
 
 Pairs with [`hwcursor`](../hwcursor) in this repo, which adds a hardware mouse cursor and
 WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
@@ -72,8 +73,8 @@ Copy `RA2Enhancements.dll` and `RA2Enhancements.dll.inj`. Syringe scans `*.dll` 
 folder and picks up the matching `.inj` on the next launch. `syringe.log` names it when it
 loads. You do not need `dsound.dll` here.
 
-The `.inj` carries `gamemd.exe` addresses only. On `game.exe` the inline patch covers the
-same ground.
+The `.inj` holds one hook, early in `gamemd.exe`'s WinMain. Syringe calls it after every mod's
+hooks are written, and the DLL installs all of its patches from there.
 
 ### Uninstall
 
@@ -110,8 +111,10 @@ Verified against Steam Yuri's Revenge 1.001 (`gamemd.exe`) and Red Alert 2 (`gam
 and against Mental Omega via Syringe 0.7.3.0.
 
 The DLL checks the exe it lands in and refuses to patch anything it does not recognise, so
-a mismatched build no-ops rather than crashing. It byte-matches every patch site before
-writing, and aborts the whole speed patch if any site reads wrong.
+a mismatched build no-ops rather than crashing. Before every write, it compares the bytes in
+memory with the exe file on disk. If another mod already changed any site a feature needs,
+that whole feature stays off and `campaignspeed.log` names the site. The other features
+still install.
 
 ## Build
 
@@ -128,22 +131,33 @@ three levels above this folder.
 
 | File | What |
 | --- | --- |
-| `src/gameprofile.h` | game detection, the per-exe address table, and which ini each game reads |
-| `src/ra2enhancements.cpp` | the DLL: select sites, speed pacer hook, sidebar queue hook, healer escort hook, Syringe exports |
+| `src/ra2enhancements.cpp` | the install list, run from `DllMain` or from the Syringe hook |
+| `src/gameprofile.cpp` | game detection and which ini each game reads |
+| `src/patch.cpp` | byte checks and the stub page |
+| `../shared/patchguard.cpp` | the log, the write guard, and call and jump writes, shared with `hwcursor` |
+| `src/gamespeed.cpp` | speed steps, the frame pacer hook, and the window title |
+| `src/commands.cpp` | the hotkey commands in the Keyboard menu and their default keys |
+| `src/quicksave.cpp` | F5 and F9, the main menu quick load, and the pre-save particle cleanup |
+| `src/selectvoice.cpp` | one voice on select-all |
+| `src/shiftqueue.cpp` | shift-click queues five |
+| `src/healerescort.cpp` | healer escort hooks |
 | `src/escort.h` | pairs healers with armed units across the width of the army |
-| `src/RA2Enhancements.dll.inj` | Syringe hook list, `gamemd.exe` only |
+| `src/RA2Enhancements.dll.inj` | the one Syringe hook that runs the install list |
 
-The DLL patches the game itself when the `dsound.dll` proxy loads it, and stands down under
-Syringe (`IsDebuggerPresent`) so the `.inj` hooks are the only ones applied for the select
-fix. One binary serves both load paths.
+Every feature installs the same way on both load paths. When the `dsound.dll` proxy loads
+the DLL, `DllMain` runs the install list. Under Syringe (`IsDebuggerPresent`), `DllMain` runs
+before Syringe writes any hooks, so it waits, and the `.inj` hook runs the list instead.
 
-The speed patch runs on both paths, because Syringe does not touch those sites.
+`InstallPatch` in `../shared/patchguard.cpp` wraps each feature. It collects the feature's writes, checks
+each site against the exe on disk, and applies all of them or none. A new feature needs only
+a line in the install list and its writes through `WriteCall`, `WriteJmp` or `WriteBytes`. It
+never needs its own `.inj` entry.
+
 `IsDebuggerPresent` also tells Mental Omega from stock Yuri's Revenge: both run the same
 `gamemd.exe`, but MO always launches through Syringe and reads `RA2MO.ini`.
 
 The hardcoded addresses live in tables at the top of each section, one row per exe. The DLL
-confirms the exe by matching bytes at an address nothing else patches, never at a hook site,
-because under Syringe the bytes at a hook site are already Syringe's.
+confirms the exe by matching bytes at an address nothing else patches, never at a hook site.
 
 Credit: the speed hook sites come from Phobos, `src/Misc/Hooks.Gamespeed.cpp`.
 

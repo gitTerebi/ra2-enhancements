@@ -1,6 +1,3 @@
-; WWMouseClass::Draw_Mouse - jump to the null-shape early-out at 007B9528
-7B93F9 = WWMouse_SkipDraw, 5
-; ShowCursor(0) at the end of WWMouseClass ctor
-7B88B9 = WWMouse_SkipHideOnCreate, 7
-; ShowCursor(0) inside WWMouseClass::Capture_Mouse
-7B9C0B = WWMouse_SkipHideOnCapture, 8
+; gamemd.exe 1.001 only. Early in WinMain, after Syringe has written every mod's hooks.
+; HWCursor installs its patch from here.
+6BB9A5 = HWCursor_Install, 5

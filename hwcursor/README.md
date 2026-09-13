@@ -82,8 +82,7 @@ does not touch game logic, units, or the network protocol.
 WASD camera movement now runs at entry to `GScreenClass::GetInputAndUpdate`,
 before its input/update work, using elapsed time and fractional-pixel accumulation.
 The hook validates the function signature and preserves CPU and floating-point
-state. It is installed during DLL loading; if validation fails, WASD scrolling is
-off. Its one Syringe hook runs once at startup and only makes Syringe load the DLL.
+state. If validation fails, WASD scrolling is off.
 With `RA2Enhancements.dll` installed, the simulation limiter also calls
 `RenderScrollFrame` during its wait while WASD or a right-button drag moves the map.
 It aims for one camera update per monitor refresh, timed from the DWM vblank clock.
@@ -122,12 +121,16 @@ into the game folder three levels above this folder.
 | `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
 | `src/dsoundforward.h` | the 12 DirectSound export thunks |
 
-The cursor DLL uses the `.inj` hooks under Syringe. The WASD DLL installs its
-validated input/update hook during loading for either loader.
+Both feature DLLs install the same way on either loader. When `dsound.dll` loads a DLL,
+its `DllMain` installs the patches. Under Syringe, `DllMain` runs before Syringe writes any
+hooks, so it waits, and the one hook in the DLL's `.inj` installs the patches early in
+WinMain instead. Every write goes through `InstallPatch` and `WriteJmp` or `WriteCall` in
+`../shared/patchguard.cpp`, which leaves a feature off if another mod already changed its
+code. A new patch never needs its own `.inj` line.
 
 The hardcoded addresses live in one table in `src/gameprofile.h`, one row per exe. Each
 DLL confirms the exe by matching bytes at an address nothing else patches, never at a
-hook site, because under Syringe the bytes at a hook site are already Syringe's.
+hook site.
 
 ## Licence
 

@@ -68,9 +68,9 @@ Files
 -----
 dsound.dll           DirectSound proxy and loader, vanilla only
 HWCursor.dll         hardware cursor, both load paths
-HWCursor.dll.inj     Syringe hook list for the above
+HWCursor.dll.inj     one Syringe hook that installs the above
 WasdScroll.dll       WASD scroll, both load paths, optional
-WasdScroll.dll.inj   Syringe hook list for the above
+WasdScroll.dll.inj   one Syringe hook that installs the above
 
 32-bit only, matching the game. Built with the VS 2022 x86 toolset.
 MIT licensed. Not affiliated with or endorsed by EA.

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "gameprofile.h"
+#include "patchguard.h"
 
 static const GameProfile *g_game;
 static HWND g_wnd;
@@ -276,26 +277,6 @@ extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
     InterlockedExchange(&g_cursorBusy, 0);
 }
 
-EXPORT_FUNC(WWMouse_SkipDraw)
-{
-    if (!g_game)
-        g_game = DetectGame();
-    if (!g_game)
-        return 0;
-    OnDrawMouse((BYTE *)(g_game->thisInEbx ? R->_EBX : R->_EAX));
-    return g_game->earlyOut;
-}
-
-EXPORT_FUNC(WWMouse_SkipHideOnCreate)
-{
-    return 0x007B88C0;
-}
-
-EXPORT_FUNC(WWMouse_SkipHideOnCapture)
-{
-    return 0x007B9C13;
-}
-
 static void EnableDpiAwareness()
 {
     char buf[8] = {};
@@ -349,27 +330,30 @@ static __declspec(naked) void StubEbx()
     }
 }
 
-static bool InstallInlineHook()
+static void InstallCursorHook()
 {
-    g_game = DetectGame();
-    if (!g_game)
-        return false;
-    if (memcmp((const void *)g_game->hook, g_game->signature, 5) != 0)
-        return false;
+    if (!g_game || memcmp((const void *)g_game->hook, g_game->signature, 5) != 0)
+        return;
     g_earlyOut = g_game->earlyOut;
+    WriteJmp(g_game->hook, g_game->thisInEbx ? (void *)StubEbx : (void *)StubEax);
+}
 
-    void *stub = g_game->thisInEbx ? (void *)StubEbx : (void *)StubEax;
-    BYTE patch[5];
-    patch[0] = 0xE9;
-    *(DWORD *)(patch + 1) = (DWORD)stub - (g_game->hook + 5);
+static void InstallAll()
+{
+    static bool s_done;
+    if (s_done || !HostIsGame())
+        return;
+    s_done = true;
+    EnableDpiAwareness();
+    g_game = DetectGame();
+    if (InstallPatch("hardware cursor", InstallCursorHook))
+        SpeedLog("  hardware cursor ready at %X", g_game->hook);
+}
 
-    DWORD old = 0;
-    if (!VirtualProtect((void *)g_game->hook, 5, PAGE_EXECUTE_READWRITE, &old))
-        return false;
-    memcpy((void *)g_game->hook, patch, 5);
-    VirtualProtect((void *)g_game->hook, 5, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), (void *)g_game->hook, 5);
-    return true;
+EXPORT_FUNC(HWCursor_Install)
+{
+    InstallAll();
+    return 0;
 }
 
 BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
@@ -377,12 +361,8 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(mod);
-        if (!HostIsGame())
-            return TRUE;
-        EnableDpiAwareness();
-        g_game = DetectGame();
         if (!IsDebuggerPresent())
-            InstallInlineHook();
+            InstallAll();
     }
     return TRUE;
 }
