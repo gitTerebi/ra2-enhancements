@@ -24,16 +24,13 @@ static const TitleProfile *g_title;
 static const char *BaseName(const char *path)
 {
     const char *slash = strrchr(path, '\\');
-    if (!slash)
-        slash = strrchr(path, '/');
     return slash ? slash + 1 : path;
 }
 
 static bool ClientMissionName(const char *map, wchar_t *out, int outChars)
 {
     char ini[MAX_PATH];
-    if (!BesideExe("INI\\BattleClient.ini", ini, sizeof(ini)) ||
-        GetFileAttributesA(ini) == INVALID_FILE_ATTRIBUTES)
+    if (!BesideExe("INI\\BattleClient.ini", ini, sizeof(ini)))
         return false;
     enum { kSectionsSize = 0x10000 };
     char *sections = (char *)malloc(kSectionsSize);
@@ -94,17 +91,12 @@ void InstallMissionSaveName()
 
     BYTE push[5] = {0x68};
     memcpy(push + 1, &t->format, 4);
-    if (!BytesAt(t->formatPush, push, sizeof(push)) || wcscmp((const wchar_t *)t->format, L"[%s]") != 0 ||
-        !CallGoesTo(t->formatCall, t->swprintf))
+    if (!BytesAt(t->formatPush, push, sizeof(push)) || !CallGoesTo(t->formatCall, t->swprintf))
     {
         SpeedLog("  mission start save name: site %X unexpected, skipped", t->formatCall);
         return;
     }
     g_title = t;
-    if (!WriteCall(t->formatCall, FormatMissionTitle))
-    {
-        g_title = NULL;
-        return;
-    }
-    SpeedLog("  mission start save name ready at %X", t->formatCall);
+    if (WriteCall(t->formatCall, FormatMissionTitle))
+        SpeedLog("  mission start save name ready at %X", t->formatCall);
 }
