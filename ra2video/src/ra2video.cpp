@@ -27,7 +27,6 @@ static const RenderMode kRender[] = {
 };
 
 #define SIZE_ID_DIVIDER (-2)
-#define SIZE_NB_FLAG 0x40000000
 #define SIZE_ID_MAXFIT (-1)
 #define SIZE_ID_MAXFIT_NB (-3)
 #define SIZE_ID_DESKTOP 0
@@ -86,8 +85,6 @@ static void ScanShaders(const char *root, const char *rel)
     FindClose(find);
 }
 static int g_dpi = 96;
-static HWND g_wnd;
-static int g_insetL, g_insetT, g_insetR, g_insetB;
 static char g_customRes[32];
 static HFONT g_font;
 
@@ -188,44 +185,15 @@ static void WriteBoth(const char *key, const char *value)
     }
 }
 
-static void MeasureInvisibleBorder()
+static int Gcd(int a, int b)
 {
-    static BOOL measured = FALSE;
-    if (measured)
-        return;
-    measured = TRUE;
-
-    HWND probe = CreateWindowExA(0, "STATIC", NULL, WS_OVERLAPPEDWINDOW, 0, 0, 400, 300, NULL,
-                                 NULL, GetModuleHandleA(NULL), NULL);
-    if (!probe)
-        return;
-
-    RECT rc = {};
-    RECT vis = {};
-    if (GetWindowRect(probe, &rc))
+    while (b)
     {
-        HMODULE dwm = LoadLibraryA("dwmapi.dll");
-        typedef HRESULT(WINAPI * GetAttr_t)(HWND, DWORD, PVOID, DWORD);
-        GetAttr_t getAttr = dwm ? (GetAttr_t)GetProcAddress(dwm, "DwmGetWindowAttribute") : NULL;
-
-        if (getAttr && SUCCEEDED(getAttr(probe, 9, &vis, sizeof(vis))))
-        {
-            g_insetL = vis.left - rc.left;
-            g_insetT = vis.top - rc.top;
-            g_insetR = rc.right - vis.right;
-            g_insetB = rc.bottom - vis.bottom;
-        }
-
-        if (dwm)
-            FreeLibrary(dwm);
+        int t = a % b;
+        a = b;
+        b = t;
     }
-
-    DestroyWindow(probe);
-
-    if (g_insetL < 0) g_insetL = 0;
-    if (g_insetT < 0) g_insetT = 0;
-    if (g_insetR < 0) g_insetR = 0;
-    if (g_insetB < 0) g_insetB = 0;
+    return a;
 }
 
 static int WorkAreaDpi(void)
@@ -279,24 +247,26 @@ static BOOL CALLBACK FindGameTitle(HWND hwnd, LPARAM lp)
     return TRUE;
 }
 
-static BOOL BorderFromLiveGame(RECT *out)
+static BOOL ClientBorder(HWND wnd, RECT *out)
 {
-    HWND game = NULL;
-    EnumWindows(FindGameTitle, (LPARAM)&game);
-    if (!game)
-        return FALSE;
-
     RECT wr = {};
     RECT cr = {};
     POINT org = {0, 0};
-    if (!GetWindowRect(game, &wr) || !GetClientRect(game, &cr) || !ClientToScreen(game, &org))
+    if (!GetWindowRect(wnd, &wr) || !GetClientRect(wnd, &cr) || !ClientToScreen(wnd, &org))
         return FALSE;
 
     out->left = org.x - wr.left;
     out->top = org.y - wr.top;
     out->right = (wr.right - wr.left) - (cr.right - cr.left) - out->left;
     out->bottom = (wr.bottom - wr.top) - (cr.bottom - cr.top) - out->top;
-    return out->top > 0;
+    return TRUE;
+}
+
+static BOOL BorderFromLiveGame(RECT *out)
+{
+    HWND game = NULL;
+    EnumWindows(FindGameTitle, (LPARAM)&game);
+    return game && ClientBorder(game, out) && out->top > 0;
 }
 
 static void MeasureGameFrame(RECT *border)
@@ -343,17 +313,7 @@ static void MeasureGameFrame(RECT *border)
                                      GetModuleHandleA(NULL), NULL);
         if (probe)
         {
-            RECT wr = {};
-            RECT cr = {};
-            POINT org = {0, 0};
-            if (GetWindowRect(probe, &wr) && GetClientRect(probe, &cr) &&
-                ClientToScreen(probe, &org))
-            {
-                cached.left = org.x - wr.left;
-                cached.top = org.y - wr.top;
-                cached.right = (wr.right - wr.left) - (cr.right - cr.left) - cached.left;
-                cached.bottom = (wr.bottom - wr.top) - (cr.bottom - cr.top) - cached.top;
-            }
+            ClientBorder(probe, &cached);
             DestroyWindow(probe);
         }
 
@@ -382,53 +342,17 @@ static void MeasureGameFrame(RECT *border)
     *border = cached;
 }
 
-static void AdjustFrameForDpi(RECT *frame)
+static void AvailArea(int *outW, int *outH)
 {
+    RECT work = {};
+    SystemParametersInfoA(SPI_GETWORKAREA, 0, &work, 0);
     RECT b = {};
     MeasureGameFrame(&b);
 
-    frame->left -= b.left;
-    frame->top -= b.top;
-    frame->right += b.right;
-    frame->bottom += b.bottom;
-}
-
-static void AvailArea(BOOL bordered, int *outW, int *outH)
-{
-    MeasureInvisibleBorder();
-
-    RECT work = {};
-    SystemParametersInfoA(SPI_GETWORKAREA, 0, &work, 0);
-
-    int availW = work.right - work.left;
-    int availH = work.bottom - work.top;
-    int frameW = 0;
-    int frameH = 0;
-
-    if (bordered)
-    {
-        RECT frame = {0, 0, 0, 0};
-        AdjustFrameForDpi(&frame);
-
-        frameW = frame.right - frame.left;
-        frameH = frame.bottom - frame.top;
-
-        availW -= frameW;
-        availH -= frameH;
-    }
-
-    if (availW < 0)
-        availW = 0;
-    if (availH < 0)
-        availH = 0;
-
-    Log("AvailArea bordered=%d dpi=%d work=%d,%d %dx%d frame=%dx%d insets=L%d,T%d,R%d,B%d -> %dx%d",
-        bordered, WorkAreaDpi(), work.left, work.top, work.right - work.left,
-        work.bottom - work.top, frameW, frameH, g_insetL, g_insetT, g_insetR, g_insetB, availW,
-        availH);
-
-    *outW = availW;
-    *outH = availH;
+    *outW = work.right - work.left - b.left - b.right;
+    *outH = work.bottom - work.top - b.top - b.bottom;
+    Log("AvailArea dpi=%d work=%d,%d %dx%d frame=%dx%d -> %dx%d", WorkAreaDpi(), work.left, work.top,
+        work.right - work.left, work.bottom - work.top, b.left + b.right, b.top + b.bottom, *outW, *outH);
 }
 
 static void MaxFit(int rw, int rh, BOOL bordered, int *outW, int *outH)
@@ -439,31 +363,13 @@ static void MaxFit(int rw, int rh, BOOL bordered, int *outW, int *outH)
     int winW = work.right - work.left;
     int winH = work.bottom - work.top;
 
-    int frameW = 0;
-    int frameH = 0;
-    if (bordered)
-    {
-        RECT frame = {0, 0, 0, 0};
-        AdjustFrameForDpi(&frame);
-        frameW = frame.right - frame.left;
-        frameH = frame.bottom - frame.top;
-    }
-
     if (rw <= 0 || rh <= 0)
     {
         rw = 16;
         rh = 9;
     }
 
-    int a = rw;
-    int b = rh;
-    while (b)
-    {
-        int t = a % b;
-        a = b;
-        b = t;
-    }
-
+    int a = Gcd(rw, rh);
     int unitW = rw / a;
     int unitH = rh / a;
 
@@ -522,85 +428,47 @@ static void BuildSizeList(int rw, int rh)
         {640, 480, 4, 3},
         {800, 600, 4, 3},
         {1024, 768, 4, 3},
+        {1280, 720, 16, 9},
         {1152, 864, 4, 3},
+        {1280, 800, 16, 10},
+        {1366, 768, 16, 9},
         {1280, 960, 4, 3},
+        {1440, 900, 16, 10},
+        {1600, 900, 16, 9},
         {1400, 1050, 4, 3},
+        {1680, 1050, 16, 10},
         {1600, 1200, 4, 3},
+        {1920, 1080, 16, 9},
+        {1920, 1200, 16, 10},
         {1920, 1440, 4, 3},
         {2048, 1536, 4, 3},
-        {1280, 800, 16, 10},
-        {1440, 900, 16, 10},
-        {1680, 1050, 16, 10},
-        {1920, 1200, 16, 10},
-        {2560, 1600, 16, 10},
-        {1280, 720, 16, 9},
-        {1366, 768, 16, 9},
-        {1600, 900, 16, 9},
-        {1920, 1080, 16, 9},
         {2560, 1440, 16, 9},
+        {2560, 1600, 16, 10},
         {3840, 2160, 16, 9},
     };
 
-    int tmpW[MAX_SIZES];
-    int tmpH[MAX_SIZES];
-    int tmpAW[MAX_SIZES];
-    int tmpAH[MAX_SIZES];
-    int tmpCount = 0;
-
     int fitW = 0;
     int fitH = 0;
-    AvailArea(TRUE, &fitW, &fitH);
+    AvailArea(&fitW, &fitH);
 
-    for (int a = 0; a < _countof(kStandard) && tmpCount < MAX_SIZES; ++a)
+    int g = Gcd(rw, rh);
+    int gw = rw / g;
+    int gh = rh / g;
+
+    for (int i = 0; i < _countof(kStandard) && g_sizeCount < MAX_SIZES; ++i)
     {
-        if (kStandard[a].w > fitW || kStandard[a].h > fitH)
+        if (kStandard[i].w > fitW || kStandard[i].h > fitH)
             continue;
 
-        tmpW[tmpCount] = kStandard[a].w;
-        tmpH[tmpCount] = kStandard[a].h;
-        tmpAW[tmpCount] = kStandard[a].aw;
-        tmpAH[tmpCount] = kStandard[a].ah;
-        tmpCount++;
-    }
-
-    for (int i = 1; i < tmpCount; ++i)
-    {
-        for (int j = i; j > 0 && (long)tmpW[j] * tmpH[j] < (long)tmpW[j - 1] * tmpH[j - 1]; --j)
-        {
-            int sw = tmpW[j]; tmpW[j] = tmpW[j - 1]; tmpW[j - 1] = sw;
-            int sh = tmpH[j]; tmpH[j] = tmpH[j - 1]; tmpH[j - 1] = sh;
-            int aw = tmpAW[j]; tmpAW[j] = tmpAW[j - 1]; tmpAW[j - 1] = aw;
-            int ah = tmpAH[j]; tmpAH[j] = tmpAH[j - 1]; tmpAH[j - 1] = ah;
-        }
-    }
-
-    int gw = rw;
-    int gh = rh;
-    int g = gw;
-    int b = gh;
-    while (b)
-    {
-        int t = g % b;
-        g = b;
-        b = t;
-    }
-    if (g > 0)
-    {
-        gw /= g;
-        gh /= g;
-    }
-
-    for (int i = 0; i < tmpCount && g_sizeCount < MAX_SIZES; ++i)
-    {
-        BOOL match = (tmpAW[i] == gw && tmpAH[i] == gh);
+        BOOL match = (kStandard[i].aw == gw && kStandard[i].ah == gh);
 
         char label[96];
         _snprintf(label, sizeof(label), "%dx%d    %d:%d%s",
-                  tmpW[i], tmpH[i], tmpAW[i], tmpAH[i],
+                  kStandard[i].w, kStandard[i].h, kStandard[i].aw, kStandard[i].ah,
                   match ? "    matches game aspect" : "");
 
-        g_sizeW[g_sizeCount] = tmpW[i];
-        g_sizeH[g_sizeCount] = tmpH[i];
+        g_sizeW[g_sizeCount] = kStandard[i].w;
+        g_sizeH[g_sizeCount] = kStandard[i].h;
         g_sizeCount++;
 
         SendMessageA(g_output, CB_ADDSTRING, 0, (LPARAM)label);
@@ -628,8 +496,6 @@ static void Apply()
     int o = (int)SendMessageA(g_output, CB_GETCURSEL, 0, 0);
     if (r < 0 || o < 0)
         return;
-
-    MeasureInvisibleBorder();
 
     const char *renderRes = (r < _countof(kRender)) ? kRender[r].res : g_customRes;
     WriteBoth("inject_resolution", renderRes);
@@ -665,7 +531,7 @@ static void Apply()
     BOOL bordered = TRUE;
     const char *fullscreen = "false";
 
-    int pick = (o >= 0 && o < g_sizeCount) ? g_sizeW[o] : SIZE_ID_MAXFIT;
+    int pick = o < g_sizeCount ? g_sizeW[o] : SIZE_ID_MAXFIT;
     BOOL pinTop = FALSE;
 
     if (pick == SIZE_ID_DESKTOP)
@@ -688,12 +554,6 @@ static void Apply()
     {
         w = g_sizeW[o];
         h = g_sizeH[o];
-
-        if (w & SIZE_NB_FLAG)
-        {
-            w &= ~SIZE_NB_FLAG;
-            bordered = FALSE;
-        }
     }
 
     char buf[32];
@@ -711,39 +571,20 @@ static void Apply()
         RECT work = {};
         SystemParametersInfoA(SPI_GETWORKAREA, 0, &work, 0);
 
-        RECT frame = {0, 0, w, h};
-        if (bordered)
-            AdjustFrameForDpi(&frame);
-
-        int winW = frame.right - frame.left;
-        int winH = frame.bottom - frame.top;
-
-        int insL = bordered ? g_insetL : 0;
-        int insT = bordered ? g_insetT : 0;
-        int insR = bordered ? g_insetR : 0;
-        int insB = bordered ? g_insetB : 0;
-
-        int visW = winW - insL - insR;
-        int visH = winH - insT - insB;
-
         RECT b = {};
         if (bordered)
             MeasureGameFrame(&b);
 
-        int fullW = w + b.left + b.right;
-
-        int winX = work.left + ((work.right - work.left) - fullW) / 2;
+        int winX = work.left + ((work.right - work.left) - (w + b.left + b.right)) / 2;
         int winY = pinTop ? work.top
                           : work.top + ((work.bottom - work.top) - (h + b.top + b.bottom)) / 2;
 
         int x = winX + b.left;
         int y = winY + b.top;
 
-        Log("Apply client=%dx%d bordered=%d border=L%d,T%d,R%d,B%d win=%dx%d vis=%dx%d", w, h,
-            bordered, b.left, b.top, b.right, b.bottom, winW, winH, visW, visH);
-        Log("  work=%d,%d %dx%d  winXY=%d,%d  posXY=%d,%d  gapTop=%d gapLeft=%d", work.left,
-            work.top, work.right - work.left, work.bottom - work.top, winX, winY, x, y,
-            winY + insT - work.top, winX + insL - work.left);
+        Log("Apply client=%dx%d bordered=%d border=L%d,T%d,R%d,B%d work=%d,%d %dx%d pos=%d,%d", w, h,
+            bordered, b.left, b.top, b.right, b.bottom, work.left, work.top, work.right - work.left,
+            work.bottom - work.top, x, y);
 
         WriteBoth("center_window", "0");
         _snprintf(buf, sizeof(buf), "%d", x);
@@ -814,9 +655,6 @@ static void LoadCurrent()
 
     int w = GetPrivateProfileIntA("ddraw", "width", 0, g_ini);
     int h = GetPrivateProfileIntA("ddraw", "height", 0, g_ini);
-    char border[16] = {}, windowed[16] = {};
-    GetPrivateProfileStringA("ddraw", "border", "false", border, sizeof(border), g_ini);
-    GetPrivateProfileStringA("ddraw", "windowed", "true", windowed, sizeof(windowed), g_ini);
 
     BuildSizeList(sw > 0 ? sw : 4, sh > 0 ? sh : 3);
 
@@ -868,9 +706,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     {
     case WM_CREATE:
     {
-        g_wnd = h;
         MakeFont(h);
-        HFONT font = g_font;
 
         HWND l1 = CreateWindowA("STATIC", "Game resolution (what the engine draws)",
                                 WS_CHILD | WS_VISIBLE, S(14), S(14), S(360), S(18), h, NULL, NULL, NULL);
@@ -906,7 +742,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         HWND kids[] = {l1, g_render, l2, g_output, l3, g_pass[0], g_pass[1], g_pass[2],
                        apply, close, g_status};
         for (int i = 0; i < _countof(kids); ++i)
-            SendMessageA(kids[i], WM_SETFONT, (WPARAM)font, TRUE);
+            SendMessageA(kids[i], WM_SETFONT, (WPARAM)g_font, TRUE);
 
         for (int i = 0; i < _countof(kRender); ++i)
             SendMessageA(g_render, CB_ADDSTRING, 0, (LPARAM)kRender[i].label);
