@@ -63,13 +63,7 @@ static void *__fastcall FillEventHook(void *self, void *edx, int player, int kin
 
 void InstallQueueBatch()
 {
-    const GameProfile *g = DetectGame();
-    if (!g)
-        return;
-    const QueueProfile *q = NULL;
-    for (int i = 0; i < _countof(kQueues); ++i)
-        if (strcmp(kQueues[i].name, g->name) == 0)
-            q = &kQueues[i];
+    const QueueProfile *q = ForThisGame(kQueues);
     if (!q)
         return;
 

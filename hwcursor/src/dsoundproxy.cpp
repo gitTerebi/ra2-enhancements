@@ -1,24 +1,7 @@
-#include <windows.h>
-#include <string.h>
+#include "patchguard.h"
 #include "dsoundforward.h"
 
 static const char *kSidecars[] = {"HWCursor.dll", "WasdScroll.dll", "RA2Enhancements.dll"};
-
-static bool HostIsGame()
-{
-    char path[MAX_PATH];
-    DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
-    if (!n || n >= sizeof(path))
-        return false;
-    const char *exe = strrchr(path, '\\');
-    exe = exe ? exe + 1 : path;
-    return _stricmp(exe, "gamemd.exe") == 0 || _stricmp(exe, "game.exe") == 0;
-}
-
-static bool RunningUnderSyringe()
-{
-    return IsDebuggerPresent() != FALSE;
-}
 
 static DWORD WINAPI LoadThread(LPVOID)
 {
@@ -47,7 +30,7 @@ BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
     {
         DisableThreadLibraryCalls(mod);
         DSoundLoadReal();
-        if (!HostIsGame() || RunningUnderSyringe())
+        if (!HostIsGame() || IsDebuggerPresent())
             return TRUE;
         CloseHandle(CreateThread(NULL, 0, LoadThread, NULL, 0, NULL));
     }

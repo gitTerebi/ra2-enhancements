@@ -1,14 +1,5 @@
 #pragma once
-#include <windows.h>
-
-struct REGISTERS
-{
-    DWORD origin;
-    DWORD flags;
-    DWORD _EDI, _ESI, _EBP, _ESP, _EBX, _EDX, _ECX, _EAX;
-};
-
-#define EXPORT_FUNC(name) extern "C" __declspec(dllexport) DWORD __cdecl name(REGISTERS *R)
+#include "patchguard.h"
 
 struct GameProfile
 {
@@ -20,6 +11,5 @@ struct GameProfile
     int detectLen;
 };
 
-bool HostIsGame();
 const GameProfile *DetectGame();
 const char *ProfileIni(const GameProfile *g);

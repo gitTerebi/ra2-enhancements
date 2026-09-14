@@ -3,19 +3,6 @@
 static BYTE *g_stubs;
 static BYTE *g_stubEnd;
 
-bool BytesAt(DWORD at, const BYTE *sig, size_t n)
-{
-    return !IsBadReadPtr((const void *)at, n) && memcmp((const void *)at, sig, n) == 0;
-}
-
-bool CallGoesTo(DWORD at, DWORD target)
-{
-    const BYTE *p = (const BYTE *)at;
-    if (IsBadReadPtr(p, 5) || p[0] != 0xE8)
-        return false;
-    return (DWORD)(at + 5 + *(const int *)(p + 1)) == target;
-}
-
 bool ReserveStubs()
 {
     if (!g_stubs)

@@ -2,40 +2,21 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <stdio.h>
-#include <string.h>
+#include "patchguard.h"
 
 namespace DrawProfiler
 {
-    static bool g_enabled;
     static volatile LONG g_started;
     static HANDLE g_target;
     static DWORD g_stackBase;
     static const bool *g_inScroll;
     static FILE *g_out;
-    static char g_dir[MAX_PATH];
-
-    inline bool IniEnabled()
-    {
-        char path[MAX_PATH];
-        DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
-        char *slash = n ? strrchr(path, '\\') : NULL;
-        if (!slash)
-            return false;
-        slash[1] = 0;
-        strcpy(g_dir, path);
-        char ini[MAX_PATH];
-        _snprintf(ini, sizeof(ini) - 1, "%sddraw.ini", g_dir);
-        ini[sizeof(ini) - 1] = 0;
-        char value[16];
-        GetPrivateProfileStringA("ddraw", "drawprofile", "", value, sizeof(value), ini);
-        return _stricmp(value, "true") == 0 || strcmp(value, "1") == 0;
-    }
 
     inline void WriteModules()
     {
         char path[MAX_PATH];
-        _snprintf(path, sizeof(path) - 1, "%sdrawprofile-modules.csv", g_dir);
-        path[sizeof(path) - 1] = 0;
+        if (!BesideExe("drawprofile-modules.csv", path, sizeof(path)))
+            return;
         FILE *f = fopen(path, "w");
         if (!f)
             return;
@@ -128,7 +109,7 @@ namespace DrawProfiler
     {
         if (InterlockedCompareExchange(&g_started, 1, 0) != 0)
             return;
-        if (!IniEnabled())
+        if (!DdrawIniFlag("drawprofile"))
             return;
         NT_TIB *tib = (NT_TIB *)NtCurrentTeb();
         g_stackBase = (DWORD)(DWORD_PTR)tib->StackBase;
@@ -137,14 +118,13 @@ namespace DrawProfiler
                              THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, 0))
             return;
         char path[MAX_PATH];
-        _snprintf(path, sizeof(path) - 1, "%sdrawprofile.csv", g_dir);
-        path[sizeof(path) - 1] = 0;
+        if (!BesideExe("drawprofile.csv", path, sizeof(path)))
+            return;
         g_out = fopen(path, "w");
         if (!g_out)
             return;
         setvbuf(g_out, NULL, _IOFBF, 1 << 20);
         fprintf(g_out, "qpc,scroll,eip,returns\n");
-        g_enabled = true;
         CloseHandle(CreateThread(NULL, 0, SamplerThread, NULL, 0, NULL));
     }
 }

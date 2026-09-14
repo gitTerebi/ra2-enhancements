@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <string.h>
 #include "gameprofile.h"
 
 static const BYTE kDetectYR[6] = {0x83, 0xC4, 0x48, 0xC2, 0x0C, 0x00};
@@ -11,18 +10,6 @@ static const GameProfile kProfiles[] = {
     {"game", "RA2.ini", "RA2.ini", 0x00772893, kDetectRA2, sizeof(kDetectRA2)},
 };
 
-// Syringe.exe 0.7.3.0 also images at 0x00400000 and LoadLibrary/FreeLibrary's our DLLs to resolve .inj exports
-bool HostIsGame()
-{
-    char path[MAX_PATH];
-    DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
-    if (!n || n >= sizeof(path))
-        return false;
-    const char *exe = strrchr(path, '\\');
-    exe = exe ? exe + 1 : path;
-    return _stricmp(exe, "gamemd.exe") == 0 || _stricmp(exe, "game.exe") == 0;
-}
-
 const GameProfile *DetectGame()
 {
     static bool s_done;
@@ -33,13 +20,8 @@ const GameProfile *DetectGame()
     if (!HostIsGame() || GetModuleHandleA(NULL) != (HMODULE)0x00400000)
         return NULL;
     for (int i = 0; i < _countof(kProfiles); ++i)
-    {
-        const GameProfile &p = kProfiles[i];
-        if (IsBadReadPtr((const void *)p.earlyOut, p.detectLen))
-            continue;
-        if (memcmp((const void *)p.earlyOut, p.detectSig, p.detectLen) == 0)
-            return s_game = &p;
-    }
+        if (BytesAt(kProfiles[i].earlyOut, kProfiles[i].detectSig, kProfiles[i].detectLen))
+            return s_game = &kProfiles[i];
     return NULL;
 }
 

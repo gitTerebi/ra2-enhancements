@@ -14,21 +14,9 @@ static int g_camTraceLines;
 
 static void OpenCamTrace()
 {
-    char dir[MAX_PATH];
-    DWORD n = GetModuleFileNameA(NULL, dir, sizeof(dir));
-    char *slash = n ? strrchr(dir, '\\') : NULL;
-    if (!slash)
+    char path[MAX_PATH];
+    if (!DdrawIniFlag("frametrace") || !BesideExe("camtrace.csv", path, sizeof(path)))
         return;
-    slash[1] = 0;
-    char ini[MAX_PATH], path[MAX_PATH];
-    _snprintf(ini, sizeof(ini) - 1, "%sddraw.ini", dir);
-    ini[sizeof(ini) - 1] = 0;
-    char value[16];
-    GetPrivateProfileStringA("ddraw", "frametrace", "", value, sizeof(value), ini);
-    if (_stricmp(value, "true") != 0 && strcmp(value, "1") != 0)
-        return;
-    _snprintf(path, sizeof(path) - 1, "%scamtrace.csv", dir);
-    path[sizeof(path) - 1] = 0;
     g_camTrace = fopen(path, "w");
     if (!g_camTrace)
         return;
@@ -38,7 +26,7 @@ static void OpenCamTrace()
 
 static void CamTrace(int source, LONGLONG start, bool moved)
 {
-    if (!g_camTrace || !g_game)
+    if (!g_camTrace)
         return;
     BYTE *tac = *(BYTE **)g_game->tacticalInstance;
     if (!tac)
@@ -52,21 +40,14 @@ static void CamTrace(int source, LONGLONG start, bool moved)
         fflush(g_camTrace);
 }
 
-static LONGLONG QpcNow()
-{
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return now.QuadPart;
-}
-
 // Called on the game thread by RA2Enhancements while its simulation timer waits.
 // Do not dispatch Map input here: that can consume commands or open modal dialogs.
 extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
 {
-    if (!g_scrollHooked || g_rendering || !g_game)
+    if (!g_scrollHooked || g_rendering)
         return;
     g_rendering = true;
-    LONGLONG start = QpcNow();
+    LONGLONG start = PresentClock::Now();
     SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
     bool rightMoved = RightScroll::Tick(g_game->mapInstance, g_game->tacticalInstance);
     bool moved = SmoothScroll::g_moved || rightMoved;
@@ -79,7 +60,7 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         (*(Method **)tactical)[0x5C / 4](tactical);
         // GScreenClass::DrawOnTop renders layers and presents the complete scene.
         (*(Method **)map)[0x3C / 4](map);
-        PresentClock::RecordCost(QpcNow() - start, start);
+        PresentClock::RecordCost(PresentClock::Now() - start, start);
     }
     CamTrace(rightMoved ? 2 : 0, start, moved);
     g_rendering = false;
@@ -102,7 +83,7 @@ static bool ScrollInputActive()
 
 extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderDue(LONGLONG now)
 {
-    if (!g_scrollHooked || !g_game || !ScrollInputActive())
+    if (!g_scrollHooked || !ScrollInputActive())
         return MAXLONGLONG;
     return PresentClock::RenderDue(now);
 }
@@ -112,21 +93,13 @@ extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderCost()
     return PresentClock::g_renderBudget;
 }
 
-static const GameProfile *Game()
-{
-    if (!g_game)
-        g_game = DetectGame();
-    return g_game;
-}
-
 extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map)
 {
-    const GameProfile *g = Game();
-    if (g && map == (void *)g->mapInstance)
+    if (map == (void *)g_game->mapInstance)
     {
         DrawProfiler::StartOnThisThread(&g_rendering);
-        LONGLONG start = QpcNow();
-        SmoothScroll::Tick(g->tacticalInstance, g->setTacticalPos);
+        LONGLONG start = PresentClock::Now();
+        SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
         CamTrace(1, start, SmoothScroll::g_moved);
     }
 }
@@ -158,18 +131,12 @@ static __declspec(naked) void ScrollStub()
 
 static void InstallScrollHook()
 {
-    const GameProfile *g = Game();
-    if (!g || !g->scrollHook)
-        return;
     static const BYTE signature[] = {0x83, 0xEC, 0x08, 0x55, 0x56, 0x57, 0x8B, 0xF9};
-    if (IsBadReadPtr((const void *)g->scrollHook, sizeof(signature)) ||
-        memcmp((const void *)g->scrollHook, signature, sizeof(signature)) != 0)
+    if (!g_game || !BytesAt(g_game->scrollHook, signature, sizeof(signature)) ||
+        !SmoothScroll::Available(g_game->setTacticalPos))
         return;
-    if (!SmoothScroll::Available(g->setTacticalPos))
-        return;
-
-    g_scrollResume = g->scrollHook + 5;
-    WriteJmp(g->scrollHook, ScrollStub);
+    g_scrollResume = g_game->scrollHook + 5;
+    WriteJmp(g_game->scrollHook, ScrollStub);
 }
 
 static void InstallRightScroll()
@@ -183,6 +150,7 @@ static void InstallAll()
     if (s_done || !HostIsGame())
         return;
     s_done = true;
+    g_game = DetectGame();
     if (!InstallPatch("WASD scroll", InstallScrollHook))
         return;
     g_scrollHooked = true;

@@ -1,8 +1,5 @@
-#include <windows.h>
 #include <stdlib.h>
-#include <string.h>
 #include "gameprofile.h"
-#include "patchguard.h"
 
 static const GameProfile *g_game;
 static HWND g_wnd;
@@ -47,11 +44,8 @@ static const BYTE *FramePixels(void *shape, int frame)
 static bool ResolvePalette()
 {
     ConvertClass *cc = *g_game->mousePal;
-    if (!cc || IsBadReadPtr(cc, sizeof(ConvertClass)))
-        return false;
-    if (cc->BytesPerPixel != 2)
-        return false;
-    if (!cc->Midpoint || IsBadReadPtr(cc->Midpoint, 512))
+    if (!cc || IsBadReadPtr(cc, sizeof(ConvertClass)) || cc->BytesPerPixel != 2 || !cc->Midpoint ||
+        IsBadReadPtr(cc->Midpoint, 512))
         return false;
     g_lut = (const unsigned short *)cc->Midpoint;
     g_is565 = (cc->HalfColorMask == 0x7BEF);
@@ -108,14 +102,12 @@ static HCURSOR BuildCursor(const BYTE *px, int w, int h, int hx, int hy)
         out[i] = idx ? ColorFor(idx) : 0;
     }
 
-
     const int maskStride = ((w + 15) / 16) * 2;
     BYTE *maskBits = (BYTE *)calloc(maskStride * h, 1);
     HBITMAP mask = CreateBitmap(w, h, 1, 1, maskBits);
     free(maskBits);
 
     ICONINFO ii = {};
-    ii.fIcon = FALSE;
     ii.xHotspot = hx;
     ii.yHotspot = hy;
     ii.hbmMask = mask;
@@ -261,19 +253,16 @@ extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
         g_wnd = NULL;
         EnumWindows(PickWindow, 0);
     }
-    if (!g_wnd)
+    if (g_wnd)
     {
-        InterlockedExchange(&g_cursorBusy, 0);
-        return;
+        if ((HCURSOR)GetClassLongPtrA(g_wnd, GCLP_HCURSOR) != want)
+        {
+            SetClassLongPtrA(g_wnd, GCLP_HCURSOR, (LONG_PTR)want);
+            SetCursor(want);
+        }
+        g_applied = want;
+        KeepShowCursorPatched();
     }
-
-    if ((HCURSOR)GetClassLongPtrA(g_wnd, GCLP_HCURSOR) != want)
-    {
-        SetClassLongPtrA(g_wnd, GCLP_HCURSOR, (LONG_PTR)want);
-        SetCursor(want);
-    }
-    g_applied = want;
-    KeepShowCursorPatched();
     InterlockedExchange(&g_cursorBusy, 0);
 }
 
@@ -332,7 +321,7 @@ static __declspec(naked) void StubEbx()
 
 static void InstallCursorHook()
 {
-    if (!g_game || memcmp((const void *)g_game->hook, g_game->signature, 5) != 0)
+    if (!g_game || !BytesAt(g_game->hook, g_game->signature, 5))
         return;
     g_earlyOut = g_game->earlyOut;
     WriteJmp(g_game->hook, g_game->thisInEbx ? (void *)StubEbx : (void *)StubEax);

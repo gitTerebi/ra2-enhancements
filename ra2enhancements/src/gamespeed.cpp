@@ -28,6 +28,8 @@ static const SpeedProfile kSpeeds[] = {
      0x00839970, 0x00839978, (TimeGetTimeFn *)0x0079A524, 0x00481FB0},
 };
 
+static const SpeedProfile *g_speed;
+
 enum { GAMEMODE_CAMPAIGN = 0, GAMEMODE_SKIRMISH = 5 };
 
 struct SpeedStep
@@ -78,8 +80,6 @@ static void SaveStep()
         SpeedLog("  ini write failed err=%d", GetLastError());
 }
 
-static DWORD *g_delaySlot;
-static const DWORD *g_gameMode;
 static bool g_prevDown[2];
 static HWND g_wnd;
 static char g_baseTitle[160];
@@ -143,7 +143,10 @@ static void PollSpeedKeys(bool focused)
 
 bool SinglePlayerMode()
 {
-    return g_gameMode && (*g_gameMode == GAMEMODE_CAMPAIGN || *g_gameMode == GAMEMODE_SKIRMISH);
+    if (!g_speed)
+        return false;
+    DWORD mode = *(const DWORD *)g_speed->gameMode;
+    return mode == GAMEMODE_CAMPAIGN || mode == GAMEMODE_SKIRMISH;
 }
 
 static LONGLONG g_qpcFreq;
@@ -166,11 +169,8 @@ static void OpenPaceTrace()
     if (s_checked)
         return;
     s_checked = true;
-    char ini[MAX_PATH], path[MAX_PATH], value[16];
-    if (!BesideExe("ddraw.ini", ini, sizeof(ini)) || !BesideExe("pacetrace.csv", path, sizeof(path)))
-        return;
-    GetPrivateProfileStringA("ddraw", "frametrace", "", value, sizeof(value), ini);
-    if (lstrcmpiA(value, "true") != 0 && lstrcmpA(value, "1") != 0)
+    char path[MAX_PATH];
+    if (!DdrawIniFlag("frametrace") || !BesideExe("pacetrace.csv", path, sizeof(path)))
         return;
     g_paceTrace = fopen(path, "w");
     if (!g_paceTrace)
@@ -218,23 +218,18 @@ static void WaitUntil(LONGLONG wake, LARGE_INTEGER &now)
         YieldProcessor();
 }
 
-static bool EnsureClock()
+static void EnsureClock()
 {
     if (g_qpcFreq)
-        return true;
+        return;
     LARGE_INTEGER f;
-    if (!QueryPerformanceFrequency(&f))
-        return false;
+    QueryPerformanceFrequency(&f);
     g_qpcFreq = f.QuadPart;
-
-    HANDLE(WINAPI * createTimerExW)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD) =
-        (HANDLE(WINAPI *)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD))GetProcAddress(
-            GetModuleHandleA("kernel32.dll"), "CreateWaitableTimerExW");
-    if (createTimerExW)
-        g_paceTimer = createTimerExW(NULL, NULL, 0x00000002 | 0x00000001, TIMER_ALL_ACCESS);
+    g_paceTimer = CreateWaitableTimerExW(NULL, NULL,
+                                         CREATE_WAITABLE_TIMER_HIGH_RESOLUTION | CREATE_WAITABLE_TIMER_MANUAL_RESET,
+                                         TIMER_ALL_ACCESS);
     if (!g_paceTimer)
         g_paceTimer = CreateWaitableTimerA(NULL, TRUE, NULL);
-    return true;
 }
 
 typedef void (__cdecl *PollFn)();
@@ -275,9 +270,9 @@ static void ScrollDrawsUntil(LONGLONG deadline, LARGE_INTEGER &now, PollFn poll)
 
 static void PaceFrame(int fps)
 {
-    if (fps <= 0 || !EnsureClock())
+    if (fps <= 0)
         return;
-
+    EnsureClock();
     const LONGLONG period = g_qpcFreq / fps;
 
     LARGE_INTEGER now;
@@ -301,13 +296,12 @@ static void PaceFrame(int fps)
     g_nextFrame += period;
 }
 
-static const SpeedProfile *g_speed;
-
 static void NetworkScrollWait()
 {
     DWORD start = *(DWORD *)g_speed->netStart;
-    if (start == 0xFFFFFFFF || !EnsureClock())
+    if (start == 0xFFFFFFFF)
         return;
+    EnsureClock();
     int remainMs = (int)*(DWORD *)g_speed->netDelay - (int)((*g_speed->timeGetTime)() - start) - 1;
     if (remainMs <= 0)
         return;
@@ -318,8 +312,8 @@ static void NetworkScrollWait()
 
 static void __cdecl AlternateDelay()
 {
-    DWORD mode = *g_gameMode;
-    bool paced = mode == GAMEMODE_CAMPAIGN || mode == GAMEMODE_SKIRMISH;
+    DWORD mode = *(const DWORD *)g_speed->gameMode;
+    bool paced = SinglePlayerMode();
     static DWORD s_loggedMode = (DWORD)-1;
     if (mode != s_loggedMode)
     {
@@ -335,7 +329,7 @@ static void __cdecl AlternateDelay()
     if (!CommandsReady())
         PollSpeedKeys(GameFocused());
 
-    *g_delaySlot = 0;
+    *(DWORD *)g_speed->delaySlot = 0;
     PaceFrame(kSteps[g_step].fps);
 }
 
@@ -357,23 +351,15 @@ static __declspec(naked) void AlternateDelayPreserveFP()
 
 static void InstallAlternatingSpeed(const SpeedProfile *s)
 {
-    const BYTE *p = (const BYTE *)s->pacer;
-    BYTE want[6];
-    want[0] = 0x8B;
-    want[1] = 0x0D;
-    *(DWORD *)(want + 2) = s->delaySlot - 8;
-
-    if (IsBadReadPtr(p, 6) || memcmp(p, want, sizeof(want)) != 0)
+    BYTE pacer[6] = {0x8B, 0x0D};
+    *(DWORD *)(pacer + 2) = s->delaySlot - 8;
+    if (!BytesAt(s->pacer, pacer, sizeof(pacer)))
     {
-        SpeedLog("  pacer %X unexpected: %02X %02X %02X %02X %02X %02X", s->pacer, p[0], p[1],
-                 p[2], p[3], p[4], p[5]);
+        SpeedLog("  pacer %X unexpected, skipped", s->pacer);
         return;
     }
     if (!ReserveStubs())
         return;
-
-    g_delaySlot = (DWORD *)s->delaySlot;
-    g_gameMode = (const DWORD *)s->gameMode;
     g_speed = s;
 
     BYTE *stub = StubCursor();
@@ -382,10 +368,10 @@ static void InstallAlternatingSpeed(const SpeedProfile *s)
     EmitCallAbs(AlternateDelayPreserveFP);
     EmitByte(0x9D);
     EmitByte(0x61);
-    Emit(p, 6);
-    EmitJmp(s->pacer + 6);
+    Emit(pacer, sizeof(pacer));
+    EmitJmp(s->pacer + sizeof(pacer));
 
-    if (WriteJmp(s->pacer, stub, 6))
+    if (WriteJmp(s->pacer, stub, sizeof(pacer)))
         SpeedLog("  speed keys ready, start=%s, [ slower, ] faster, hook at %X",
                  kSteps[g_step].label, s->pacer);
 }
@@ -397,54 +383,23 @@ void InstallCampaignSpeed()
     SpeedLog("attach exe=%s base=%X dbg=%d", exe, (DWORD)GetModuleHandleA(NULL),
              IsDebuggerPresent());
 
-    const GameProfile *g = DetectGame();
-    if (!g)
+    const SpeedProfile *s = ForThisGame(kSpeeds);
+    if (!s)
     {
         SpeedLog("  DetectGame failed");
         return;
     }
-    LoadStep(g);
+    LoadStep(DetectGame());
 
-    const SpeedProfile *s = NULL;
-    for (int i = 0; i < _countof(kSpeeds); ++i)
-        if (strcmp(kSpeeds[i].name, g->name) == 0)
-            s = &kSpeeds[i];
-    if (!s)
+    BYTE options[10] = {0xC7, 0x05};
+    *(DWORD *)(options + 2) = s->gameOptions;
+    *(DWORD *)(options + 6) = 2;
+    static const BYTE delay[5] = {0xB9, 0x02, 0x00, 0x00, 0x00};
+    if (!BytesAt(s->sites[0], options, sizeof(options)) || !BytesAt(s->sites[1], options, sizeof(options)) ||
+        !BytesAt(s->delaySite, delay, sizeof(delay)))
     {
-        SpeedLog("  no speed profile for %s", g->name);
+        SpeedLog("  speed sites %X, %X or %X unexpected, skipped", s->sites[0], s->sites[1], s->delaySite);
         return;
     }
-    SpeedLog("  profile=%s gameOptions=%X", s->name, s->gameOptions);
-
-    BYTE want[10];
-    want[0] = 0xC7;
-    want[1] = 0x05;
-    *(DWORD *)(want + 2) = s->gameOptions;
-    *(DWORD *)(want + 6) = 2;
-
-    for (int i = 0; i < 2; ++i)
-    {
-        if (IsBadReadPtr((const void *)s->sites[i], sizeof(want)))
-        {
-            SpeedLog("  site %X unreadable", s->sites[i]);
-            return;
-        }
-        const BYTE *p = (const BYTE *)s->sites[i];
-        SpeedLog("  site %X has %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
-                 s->sites[i], p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9]);
-        if (memcmp(p, want, sizeof(want)) != 0)
-        {
-            SpeedLog("  site %X signature mismatch, aborting", s->sites[i]);
-            return;
-        }
-    }
-
-    const BYTE *dp = (const BYTE *)s->delaySite;
-    if (IsBadReadPtr(dp, 5) || dp[0] != 0xB9 || *(const DWORD *)(dp + 1) != 2)
-    {
-        SpeedLog("  delay site %X unexpected, aborting", s->delaySite);
-        return;
-    }
-
     InstallAlternatingSpeed(s);
 }

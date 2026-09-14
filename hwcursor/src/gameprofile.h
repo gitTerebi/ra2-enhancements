@@ -1,15 +1,5 @@
 #pragma once
-#include <windows.h>
-#include <string.h>
-
-struct REGISTERS
-{
-    DWORD origin;
-    DWORD flags;
-    DWORD _EDI, _ESI, _EBP, _ESP, _EBX, _EDX, _ECX, _EAX;
-};
-
-#define EXPORT_FUNC(name) extern "C" __declspec(dllexport) DWORD __cdecl name(REGISTERS *R)
+#include "patchguard.h"
 
 typedef void *(__thiscall *GetFramePixels_t)(void *shape, int frame);
 
@@ -59,18 +49,6 @@ static const GameProfile kProfiles[] = {
      0x0083996C, 0x006A6640, 0x004E09D0, 0x008324E0},
 };
 
-// Syringe.exe 0.7.3.0 also images at 0x00400000 and LoadLibrary/FreeLibrary's our DLLs to resolve .inj exports
-inline bool HostIsGame()
-{
-    char path[MAX_PATH];
-    DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
-    if (!n || n >= sizeof(path))
-        return false;
-    const char *exe = strrchr(path, '\\');
-    exe = exe ? exe + 1 : path;
-    return _stricmp(exe, "gamemd.exe") == 0 || _stricmp(exe, "game.exe") == 0;
-}
-
 inline const GameProfile *DetectGame()
 {
     static bool s_done;
@@ -81,12 +59,7 @@ inline const GameProfile *DetectGame()
     if (!HostIsGame() || GetModuleHandleA(NULL) != (HMODULE)0x00400000)
         return NULL;
     for (int i = 0; i < _countof(kProfiles); ++i)
-    {
-        const GameProfile &p = kProfiles[i];
-        if (IsBadReadPtr((const void *)p.earlyOut, p.detectLen))
-            continue;
-        if (memcmp((const void *)p.earlyOut, p.detectSig, p.detectLen) == 0)
-            return s_game = &p;
-    }
+        if (BytesAt(kProfiles[i].earlyOut, kProfiles[i].detectSig, kProfiles[i].detectLen))
+            return s_game = &kProfiles[i];
     return NULL;
 }

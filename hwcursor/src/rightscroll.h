@@ -121,12 +121,8 @@ namespace RightScroll
         const DWORD originals[] = {p.update, p.scrollMap, p.scrollMap};
         const DWORD replacements[] = {(DWORD)Update, (DWORD)Move, (DWORD)Move};
         for (int i = 0; i < 3; ++i)
-        {
-            const BYTE *site = (const BYTE *)sites[i];
-            if (IsBadReadPtr(site, 5) || site[0] != 0xE8 ||
-                sites[i] + 5 + *(const DWORD *)(site + 1) != originals[i])
+            if (!CallGoesTo(sites[i], originals[i]))
                 return false;
-        }
         for (int i = 0; i < 3; ++i)
             if (!WriteCall(sites[i], (const void *)replacements[i]))
                 return false;

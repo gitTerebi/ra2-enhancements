@@ -138,8 +138,8 @@ three levels above this folder.
 | --- | --- |
 | `src/ra2enhancements.cpp` | the install list, run from `DllMain` or from the Syringe hook |
 | `src/gameprofile.cpp` | game detection and which ini each game reads |
-| `src/patch.cpp` | byte checks and the stub page |
-| `../shared/patchguard.cpp` | the log, the write guard, and call and jump writes, shared with `hwcursor` |
+| `src/patch.cpp` | the stub page, and `ForThisGame` in `patch.h`, which picks a table's row for the running exe |
+| `../shared/patchguard.cpp` | the log, byte checks, the write guard, and call and jump writes, shared with `hwcursor` |
 | `src/gamespeed.cpp` | speed steps, the frame pacer hook, and the window title |
 | `src/commands.cpp` | the hotkey commands in the Keyboard menu and their default keys |
 | `src/quicksave.cpp` | F5 and F9, the main menu quick load, and the pre-save particle cleanup |

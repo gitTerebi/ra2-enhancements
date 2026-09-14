@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <stdlib.h>
+#include "patchguard.h"
 #include "scrollspeed.h"
 #include "presentclock.h"
 
@@ -20,27 +21,15 @@ namespace SmoothScroll
 
     inline bool Available(DWORD setPos)
     {
-        static DWORD s_checked;
-        static bool s_ok;
-        if (s_checked != setPos)
-        {
-            s_checked = setPos;
-            s_ok = setPos && GetModuleHandleA(NULL) == (HMODULE)0x00400000 &&
-                   !IsBadReadPtr((void *)setPos, sizeof(kSetPosSig)) &&
-                   memcmp((const void *)setPos, kSetPosSig, sizeof(kSetPosSig)) == 0;
-        }
-        return s_ok;
+        return BytesAt(setPos, kSetPosSig, sizeof(kSetPosSig));
     }
 
-    inline bool Tick(DWORD instance, DWORD setPos)
+    inline void Tick(DWORD instance, DWORD setPos)
     {
         g_moved = false;
-        if (!Available(setPos))
-            return false;
-
         void *tac = *(void **)instance;
         if (!tac)
-            return false;
+            return;
 
         LONGLONG target = PresentClock::CameraTarget(PresentClock::Now());
         if (g_freq == 0.0)
@@ -49,7 +38,7 @@ namespace SmoothScroll
             QueryPerformanceFrequency(&f);
             g_freq = (double)f.QuadPart;
             g_last = target;
-            return true;
+            return;
         }
         double dt = (target - g_last) / g_freq;
         g_last = target;
@@ -77,7 +66,7 @@ namespace SmoothScroll
         {
             g_ax = 0.0;
             g_ay = 0.0;
-            return true;
+            return;
         }
 
         double step = ScrollSpeed::PixelsPerSecond() * g_dt;
@@ -90,7 +79,7 @@ namespace SmoothScroll
         int mx = (int)g_ax;
         int my = (int)g_ay;
         if (!mx && !my)
-            return true;
+            return;
 
         g_ax -= mx;
         g_ay -= my;
@@ -100,6 +89,5 @@ namespace SmoothScroll
         pos[1] = *(int *)((BYTE *)tac + kPosY) + my;
         ((SetTacticalPos_t)setPos)(tac, NULL, pos);
         g_moved = true;
-        return true;
     }
 }

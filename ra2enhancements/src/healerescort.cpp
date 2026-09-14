@@ -221,28 +221,6 @@ static __declspec(naked) void HealerCellClickedAction()
     }
 }
 
-static const HealerProfile *FindHealerProfile()
-{
-    const GameProfile *g = DetectGame();
-    if (!g)
-        return NULL;
-    for (int i = 0; i < _countof(kHealers); ++i)
-        if (strcmp(kHealers[i].name, g->name) == 0)
-            return &kHealers[i];
-    return NULL;
-}
-
-static bool UseHealerProfile(const HealerProfile *h)
-{
-    if (!h || IsBadReadPtr((const void *)h->combatDamage, sizeof(kCombatDamageSig)) ||
-        memcmp((const void *)h->combatDamage, kCombatDamageSig, sizeof(kCombatDamageSig)) != 0)
-        return false;
-    g_healer = h;
-    g_healerSlot = h->clickSlot;
-    g_healerCellSlot = h->cellSlot;
-    return true;
-}
-
 static bool CallSiteLooksRight(DWORD site, BYTE modrm, DWORD slot)
 {
     BYTE want[6] = {0xFF, modrm};
@@ -252,15 +230,19 @@ static bool CallSiteLooksRight(DWORD site, BYTE modrm, DWORD slot)
 
 void InstallHealerEscort()
 {
-    const HealerProfile *h = FindHealerProfile();
+    const HealerProfile *h = ForThisGame(kHealers);
     if (!h)
         return;
     if (!CallSiteLooksRight(h->clickSite, 0x92, h->clickSlot) ||
-        !CallSiteLooksRight(h->cellSite, 0x95, h->cellSlot) || !UseHealerProfile(h))
+        !CallSiteLooksRight(h->cellSite, 0x95, h->cellSlot) ||
+        !BytesAt(h->combatDamage, kCombatDamageSig, sizeof(kCombatDamageSig)))
     {
         SpeedLog("  healer escort: sites %X/%X unexpected, skipped", h->clickSite, h->cellSite);
         return;
     }
+    g_healer = h;
+    g_healerSlot = h->clickSlot;
+    g_healerCellSlot = h->cellSlot;
     WriteCall(h->clickSite, HealerClickedAction, 6);
     WriteCall(h->cellSite, HealerCellClickedAction, 6);
     SpeedLog("  healer escort ready at %X and %X", h->clickSite, h->cellSite);

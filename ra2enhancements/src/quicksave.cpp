@@ -94,13 +94,7 @@ static const SaveProfile *g_save;
 
 static void InstallSaveTweaks()
 {
-    const GameProfile *g = DetectGame();
-    if (!g)
-        return;
-    const SaveProfile *s = NULL;
-    for (int i = 0; i < _countof(kSaves); ++i)
-        if (strcmp(kSaves[i].name, g->name) == 0)
-            s = &kSaves[i];
+    const SaveProfile *s = ForThisGame(kSaves);
     if (!s)
         return;
 
@@ -118,16 +112,15 @@ static void InstallSaveTweaks()
         SpeedLog("  save boxes removed at %X and %X", s->confirmJump, s->savedBox);
     }
 
-    if (!BytesAt(s->loadWrap + 0x10, kLoadWrapSig, sizeof(kLoadWrapSig)) ||
+    BYTE mouseLoad[6] = {0x8B, 0x0D};
+    *(DWORD *)(mouseLoad + 2) = s->mouseInstance;
+    if (!BytesAt(s->loadWrap, mouseLoad, sizeof(mouseLoad)) ||
+        !BytesAt(s->loadWrap + 0x10, kLoadWrapSig, sizeof(kLoadWrapSig)) ||
         !BytesAt(s->saveWrap + 0x04, kSaveWrapSig, sizeof(kSaveWrapSig)))
     {
         SpeedLog("  quick save: wrappers %X/%X unexpected, skipped", s->loadWrap, s->saveWrap);
         return;
     }
-    static const BYTE mouseLoadSig[2] = {0x8B, 0x0D};
-    if (!BytesAt(s->loadWrap, mouseLoadSig, sizeof(mouseLoadSig)) ||
-        !BytesAt(s->loadWrap + 2, (const BYTE *)&s->mouseInstance, sizeof(s->mouseInstance)))
-        return;
     BYTE runningTest[10] = {0x8A, 0x81, 0, 0, 0, 0, 0x84, 0xC0, 0x0F, 0x85};
     memcpy(runningTest + 2, &s->sessionRunningOffset, 4);
     if (!CallGoesTo(s->sessionPauseCall, s->sessionPause) ||
@@ -268,11 +261,11 @@ static bool LoadQuickSave(int slot)
     return ok;
 }
 
-static void RunPendingSaves(bool allowed)
+static void __cdecl RunPendingSaves()
 {
     bool save = g_quickSavePending, load = g_quickLoadPending;
     g_quickSavePending = g_quickLoadPending = false;
-    if (!g_save || !allowed)
+    if (!g_save || !SinglePlayerMode())
         return;
     if (save)
     {
@@ -291,11 +284,6 @@ static void RunPendingSaves(bool allowed)
     typedef void (__thiscall *SessionResumeFn)(void *session);
     LoadQuickSave(slot);
     ((SessionResumeFn)g_save->sessionResume)((void *)g_save->session);
-}
-
-static void __cdecl RunPendingSavesAfterFrame()
-{
-    RunPendingSaves(SinglePlayerMode());
 }
 
 static bool g_menuQuickLoad;
@@ -349,7 +337,7 @@ static void InstallSaveHook()
     BYTE *stub = StubCursor();
     EmitByte(0x60);
     EmitByte(0x9C);
-    EmitCallAbs(RunPendingSavesAfterFrame);
+    EmitCallAbs(RunPendingSaves);
     EmitByte(0x9D);
     EmitByte(0x61);
     EmitJmp(g_save->menu);

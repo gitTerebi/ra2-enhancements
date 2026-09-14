@@ -51,16 +51,9 @@ static void __fastcall UnmuteC()
     *g_allowVoice = 1;
 }
 
-static void UseProfile(const FixProfile &f)
-{
-    g_allowVoice = (BYTE *)f.allowVoice;
-    g_selectSlot = f.selectSlot;
-}
-
 static bool SiteLooksRight(const SelectSite &s)
 {
-    return memcmp((const void *)s.callAddr, s.callSig, sizeof(s.callSig)) == 0 &&
-           memcmp((const void *)s.doneAddr, s.doneSig, s.doneLen) == 0;
+    return BytesAt(s.callAddr, s.callSig, sizeof(s.callSig)) && BytesAt(s.doneAddr, s.doneSig, s.doneLen);
 }
 
 static void PatchSite(const SelectSite &s)
@@ -83,20 +76,11 @@ static void PatchSite(const SelectSite &s)
 
 void InstallSelectVoice()
 {
-    const GameProfile *g = DetectGame();
-    if (!g)
+    const FixProfile *f = ForThisGame(kFixes);
+    if (!f || !SiteLooksRight(f->typeSelect) || !SiteLooksRight(f->combatantSelect) || !ReserveStubs())
         return;
-    const FixProfile *f = NULL;
-    for (int i = 0; i < _countof(kFixes); ++i)
-        if (strcmp(kFixes[i].name, g->name) == 0)
-            f = &kFixes[i];
-    if (!f)
-        return;
-    if (!SiteLooksRight(f->typeSelect) || !SiteLooksRight(f->combatantSelect))
-        return;
-    if (!ReserveStubs())
-        return;
-    UseProfile(*f);
+    g_allowVoice = (BYTE *)f->allowVoice;
+    g_selectSlot = f->selectSlot;
     PatchSite(f->typeSelect);
     PatchSite(f->combatantSelect);
 }

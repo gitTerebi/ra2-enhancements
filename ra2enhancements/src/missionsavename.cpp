@@ -79,13 +79,7 @@ static int __cdecl FormatMissionTitle(wchar_t *buffer, const wchar_t *format, co
 
 void InstallMissionSaveName()
 {
-    const GameProfile *g = DetectGame();
-    if (!g)
-        return;
-    const TitleProfile *t = NULL;
-    for (int i = 0; i < _countof(kTitles); ++i)
-        if (strcmp(kTitles[i].name, g->name) == 0)
-            t = &kTitles[i];
+    const TitleProfile *t = ForThisGame(kTitles);
     if (!t)
         return;
 

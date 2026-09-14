@@ -81,13 +81,14 @@ struct CommandProfile
 {
     const char *name;
     DWORD keyboardLoad;
+    DWORD keyboardLoadFrame;
     CommandVector *commands;
     const char *keyboardIni;
 };
 
 static const CommandProfile kCommands[] = {
-    {"gamemd", 0x00533D20, (CommandVector *)0x0087F658, "KeyboardMD.ini"},
-    {"game", 0x00519240, (CommandVector *)0x00832358, "Keyboard.ini"},
+    {"gamemd", 0x00533D20, 0xCC, (CommandVector *)0x0087F658, "KeyboardMD.ini"},
+    {"game", 0x00519240, 0xBC, (CommandVector *)0x00832358, "Keyboard.ini"},
 };
 
 static const CommandProfile *g_commandProfile;
@@ -127,8 +128,7 @@ static bool AddCommand(CommandVector *v, void *cmd)
 static void SeedDefaultKeys()
 {
     char ini[MAX_PATH];
-    if (!BesideExe(g_commandProfile->keyboardIni, ini, sizeof(ini)) ||
-        GetFileAttributesA(ini) == INVALID_FILE_ATTRIBUTES)
+    if (!BesideExe(g_commandProfile->keyboardIni, ini, sizeof(ini)))
         return;
 
     char section[8192];
@@ -199,18 +199,12 @@ static void __cdecl RegisterCommands()
 
 void InstallCommands()
 {
-    const GameProfile *g = DetectGame();
-    if (!g)
-        return;
-    const CommandProfile *p = NULL;
-    for (int i = 0; i < _countof(kCommands); ++i)
-        if (strcmp(kCommands[i].name, g->name) == 0)
-            p = &kCommands[i];
+    const CommandProfile *p = ForThisGame(kCommands);
     if (!p)
         return;
 
     BYTE want[6] = {0x81, 0xEC};
-    *(DWORD *)(want + 2) = strcmp(p->name, "gamemd") == 0 ? 0xCC : 0xBC;
+    *(DWORD *)(want + 2) = p->keyboardLoadFrame;
     if (!BytesAt(p->keyboardLoad, want, sizeof(want)))
     {
         SpeedLog("  commands: keyboard load %X unexpected, skipped", p->keyboardLoad);

@@ -17,7 +17,7 @@ cd /d "%ROOT%build"
 
 cl /nologo /O2 /MT /LD /I "%ROOT%..\shared" /Fe:HWCursor.dll "%ROOT%src\hwcursor.cpp" "%ROOT%..\shared\patchguard.cpp" /link /DLL user32.lib gdi32.lib || exit /b 1
 cl /nologo /O2 /MT /LD /I "%ROOT%..\shared" /Fe:WasdScroll.dll "%ROOT%src\wasd.cpp" "%ROOT%..\shared\patchguard.cpp" /link /DLL user32.lib || exit /b 1
-cl /nologo /O2 /MT /LD /Fe:dsound.dll "%ROOT%src\dsoundproxy.cpp" /link /DLL || exit /b 1
+cl /nologo /O2 /MT /LD /I "%ROOT%..\shared" /Fe:dsound.dll "%ROOT%src\dsoundproxy.cpp" /link /DLL || exit /b 1
 
 if not exist "%ROOT%_dist" mkdir "%ROOT%_dist"
 set "COPYFAIL="

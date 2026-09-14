@@ -13,6 +13,28 @@ bool BesideExe(const char *name, char *out, size_t outSize)
     return true;
 }
 
+bool DdrawIniFlag(const char *key)
+{
+    char ini[MAX_PATH], value[16];
+    if (!BesideExe("ddraw.ini", ini, sizeof(ini)))
+        return false;
+    GetPrivateProfileStringA("ddraw", key, "", value, sizeof(value), ini);
+    return lstrcmpiA(value, "true") == 0 || lstrcmpA(value, "1") == 0;
+}
+
+bool BytesAt(DWORD at, const BYTE *sig, size_t n)
+{
+    return !IsBadReadPtr((const void *)at, n) && memcmp((const void *)at, sig, n) == 0;
+}
+
+bool CallGoesTo(DWORD at, DWORD target)
+{
+    const BYTE *p = (const BYTE *)at;
+    if (IsBadReadPtr(p, 5) || p[0] != 0xE8)
+        return false;
+    return (DWORD)(at + 5 + *(const int *)(p + 1)) == target;
+}
+
 void SpeedLog(const char *fmt, ...)
 {
     char path[MAX_PATH];
