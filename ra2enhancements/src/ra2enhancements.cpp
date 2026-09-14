@@ -13,6 +13,7 @@ static void InstallAll()
     InstallPatch("select voice", InstallSelectVoice);
     InstallPatch("healer escort", InstallHealerEscort);
     InstallPatch("quick save", InstallQuickSave);
+    InstallPatch("mission start save name", InstallMissionSaveName);
     InstallPatch("hotkey commands", InstallCommands);
 }
 

@@ -7,6 +7,7 @@ void InstallQueueBatch();
 void InstallSelectVoice();
 void InstallHealerEscort();
 void InstallQuickSave();
+void InstallMissionSaveName();
 void InstallCommands();
 
 void StepSpeed(int dir);

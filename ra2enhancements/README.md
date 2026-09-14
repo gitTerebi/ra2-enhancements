@@ -34,6 +34,11 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   save, and no longer shows a "Game saved" box afterwards. This works in Mental Omega too. Its
   CnCNet spawner moves every save into `Saved Games\`, so the quick saves sit there, and F9
   looks in whatever folder the Load menu lists.
+- **Mental Omega mission start saves have names.** The game saves each campaign mission as it
+  starts and titles the save with the mission name from `MISSIONMD.INI`. Mental Omega launches
+  missions through its client, which leaves that name empty, so every mission start save was
+  called `[]`. The DLL now takes the name from the client's `INI\BattleClient.ini`, for example
+  `[Soviet 01: BLEED RED]`, and falls back to the map file name.
 - **Old quick saves heal themselves.** An earlier build saved on F5 in the middle of a frame,
   after some particles had died but before the game deleted them. Those saves hold leaked
   particles, and once their particle system is gone a later save crashes on load. Before every
@@ -138,6 +143,7 @@ three levels above this folder.
 | `src/gamespeed.cpp` | speed steps, the frame pacer hook, and the window title |
 | `src/commands.cpp` | the hotkey commands in the Keyboard menu and their default keys |
 | `src/quicksave.cpp` | F5 and F9, the main menu quick load, and the pre-save particle cleanup |
+| `src/missionsavename.cpp` | the Mental Omega mission name in mission start save titles |
 | `src/selectvoice.cpp` | one voice on select-all |
 | `src/shiftqueue.cpp` | shift-click queues five |
 | `src/healerescort.cpp` | healer escort hooks |
