@@ -165,61 +165,6 @@ static HCURSOR CursorFor(void *shape, int frame, int w, int h, int hx, int hy)
     return cur;
 }
 
-typedef int(WINAPI *ShowCursorProc)(BOOL);
-static PROC *g_showCursorSlot;
-static ShowCursorProc g_nextShowCursor;
-
-static int WINAPI IgnoreCursorHide(BOOL show)
-{
-    if (show)
-        return g_nextShowCursor(TRUE);
-    return -1;
-}
-
-static PROC *FindShowCursorImport()
-{
-    BYTE *exe = (BYTE *)GetModuleHandleA(NULL);
-    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(exe + ((IMAGE_DOS_HEADER *)exe)->e_lfanew);
-    DWORD rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
-    if (!rva)
-        return NULL;
-    for (IMAGE_IMPORT_DESCRIPTOR *d = (IMAGE_IMPORT_DESCRIPTOR *)(exe + rva); d->FirstThunk; ++d)
-    {
-        if (!d->OriginalFirstThunk || _stricmp((char *)exe + d->Name, "user32.dll") != 0)
-            continue;
-        IMAGE_THUNK_DATA *names = (IMAGE_THUNK_DATA *)(exe + d->OriginalFirstThunk);
-        IMAGE_THUNK_DATA *slots = (IMAGE_THUNK_DATA *)(exe + d->FirstThunk);
-        for (; names->u1.AddressOfData; ++names, ++slots)
-        {
-            if (names->u1.Ordinal & IMAGE_ORDINAL_FLAG)
-                continue;
-            IMAGE_IMPORT_BY_NAME *ibn = (IMAGE_IMPORT_BY_NAME *)(exe + names->u1.AddressOfData);
-            if (strcmp((char *)ibn->Name, "ShowCursor") == 0)
-                return (PROC *)&slots->u1.Function;
-        }
-    }
-    return NULL;
-}
-
-static void KeepShowCursorPatched()
-{
-    if (!g_showCursorSlot && !(g_showCursorSlot = FindShowCursorImport()))
-        return;
-    PROC current = *g_showCursorSlot;
-    if (current == (PROC)IgnoreCursorHide)
-        return;
-    DWORD old;
-    if (!VirtualProtect(g_showCursorSlot, sizeof(PROC), PAGE_READWRITE, &old))
-        return;
-    g_nextShowCursor = (ShowCursorProc)current;
-    *g_showCursorSlot = (PROC)IgnoreCursorHide;
-    VirtualProtect(g_showCursorSlot, sizeof(PROC), old, &old);
-    CURSORINFO info = {sizeof(info)};
-    if (GetCursorInfo(&info) && !(info.flags & CURSOR_SHOWING))
-        while (g_nextShowCursor(TRUE) < 0)
-            ;
-}
-
 static LONG g_cursorBusy;
 
 extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
@@ -261,7 +206,6 @@ extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
             SetCursor(want);
         }
         g_applied = want;
-        KeepShowCursorPatched();
     }
     InterlockedExchange(&g_cursorBusy, 0);
 }
@@ -319,17 +263,75 @@ static __declspec(naked) void StubEbx()
     }
 }
 
+typedef int(WINAPI *ShowCursorProc)(BOOL);
+static ShowCursorProc *g_gameShowCursor;
+
+// CaptureMouse switches from the OS cursor to the software cursor. With the
+// software sprite replaced, apply the logical state instead of hiding the OS
+// cursor unconditionally. Use the game's import so cnc-ddraw tracks the count.
+static void __cdecl OnCaptureMouse(BYTE *self)
+{
+    const BOOL visible = *(const int *)(self + 0x0C) >= 0;
+    if (visible)
+    {
+        HCURSOR cursor = g_applied;
+        if (!cursor)
+            cursor = LoadCursorA(NULL, IDC_ARROW);
+        SetCursor(cursor);
+        while ((*g_gameShowCursor)(TRUE) < 0) {}
+    }
+    else
+    {
+        while ((*g_gameShowCursor)(FALSE) >= 0) {}
+    }
+}
+
+static __declspec(naked) void CaptureMouseStub()
+{
+    __asm {
+        pushfd
+        pushad
+        push esi
+        call OnCaptureMouse
+        add esp, 4
+        popad
+        popfd
+        ret
+    }
+}
+
 static void InstallCursorHook()
 {
     if (!g_game || !BytesAt(g_game->hook, g_game->signature, 5))
         return;
+
+    const bool yr = strcmp(g_game->name, "gamemd") == 0;
+    const DWORD showEnd = yr ? 0x007B98EC : 0x00772C5C;
+    const DWORD hideEnd = yr ? 0x007B9A23 : 0x00772D93;
+    const DWORD captureHide = yr ? 0x007B9C0B : 0x00772F7B;
+    const DWORD showImport = yr ? 0x007E13DC : 0x0079A3CC;
+    const BYTE skipOSVisibility[] = {0xEB, 0x16};
+    BYTE captureCall[] = {0x6A, 0x00, 0xFF, 0x15, 0, 0, 0, 0};
+    memcpy(captureCall + 4, &showImport, sizeof(showImport));
+    if (!BytesAt(showEnd, skipOSVisibility, sizeof(skipOSVisibility)) ||
+        !BytesAt(hideEnd, skipOSVisibility, sizeof(skipOSVisibility)) ||
+        !BytesAt(captureHide, captureCall, sizeof(captureCall)))
+    {
+        SpeedLog("  hardware cursor: visibility sites differ; no hooks installed");
+        return;
+    }
+
+    g_gameShowCursor = (ShowCursorProc *)showImport;
     g_earlyOut = g_game->earlyOut;
     WriteJmp(g_game->hook, g_game->thisInEbx ? (void *)StubEbx : (void *)StubEax);
-    if (strcmp(g_game->name, "gamemd") == 0)
-    {
-        WriteJmp(0x007B88B9, (void *)0x007B88C0, 7);
-        WriteJmp(0x007B9C0B, (void *)0x007B9C13, 8);
-    }
+
+    // Keep the software bookkeeping and image update, then fall through to the
+    // game's existing OS ShowCursor loops. These paths run only at logical
+    // visibility transitions (refcount -1 -> 0 and 0 -> -1).
+    const BYTE fallThrough[] = {0x90, 0x90};
+    WriteBytes(showEnd, fallThrough, sizeof(fallThrough));
+    WriteBytes(hideEnd, fallThrough, sizeof(fallThrough));
+    WriteCall(captureHide, (void *)CaptureMouseStub, sizeof(captureCall));
 }
 
 static void InstallAll()
