@@ -20,6 +20,7 @@ struct HealerProfile
     DWORD clickSite;
     DWORD clickSlot;
     DWORD cellSite;
+    DWORD moveSite;
     DWORD cellSlot;
     DWORD combatDamage;
     DWORD assignMissionSlot;
@@ -29,10 +30,10 @@ struct HealerProfile
 };
 
 static const HealerProfile kHealers[] = {
-    {"gamemd", 0x004AE844, 0x144, 0x004AE927, 0x140, 0x006F3970, 0x378, 0x298,
+    {"gamemd", 0x004AE844, 0x144, 0x004AE927, 0x004AE97C, 0x140, 0x006F3970, 0x378, 0x298,
      (void ***)0x00A8ECBC, (int *)0x00A8ECC8},
-    {"game", 0x0049E964, 0x138, 0x0049EA47, 0x134, 0x006C16F0, 0x320, 0, (void ***)0x00A40C64,
-     (int *)0x00A40C70},
+    {"game", 0x0049E964, 0x138, 0x0049EA47, 0x0049EA9C, 0x134, 0x006C16F0, 0x320, 0,
+     (void ***)0x00A40C64, (int *)0x00A40C70},
 };
 
 static const BYTE kCombatDamageSig[16] = {0x53, 0x8B, 0x5C, 0x24, 0x08, 0x56, 0x57, 0x33,
@@ -134,19 +135,22 @@ static void ForgetEscortsIfFirst(void *obj)
         g_escortSelected = -1;
 }
 
-static void Escort(void *obj, const int *targetPos)
+static bool Escort(void *obj, const int *targetPos, bool needEscort)
 {
     void **items = *g_healer->selectedItems;
     int count = *g_healer->selectedCount;
     if (items != g_escortItems || count != g_escortSelected)
         RebuildEscorts(items, count, targetPos);
 
+    void *escort = EscortFor(obj);
+    if (!escort && needEscort)
+        return false;
     DWORD off = g_healer->deactivatedOffset;
     if (off && *((const BYTE *)obj + off))
-        return;
-    void *escort = EscortFor(obj);
+        return true;
     AssignMissionFn assign = (*(AssignMissionFn **)obj)[g_healer->assignMissionSlot / 4];
     assign(obj, MISSION_AREA_GUARD, escort ? escort : obj, NULL, 0);
+    return true;
 }
 
 static bool __cdecl HealerObjectClick(void *obj, int action, void *target, int groupAction)
@@ -159,18 +163,16 @@ static bool __cdecl HealerObjectClick(void *obj, int action, void *target, int g
         return false;
     int targetPos[3];
     (*(GetCoordsFn **)target)[VT_GETCOORDS / 4](target, targetPos);
-    Escort(obj, targetPos);
-    return true;
+    return Escort(obj, targetPos, false);
 }
 
 static bool __cdecl HealerCellClick(void *obj, const short *cell, int groupAction)
 {
     ForgetEscortsIfFirst(obj);
-    if (groupAction != ACT_ATTACK || !cell || !IsHealer(obj))
+    if ((groupAction != ACT_ATTACK && groupAction != ACT_MOVE) || !cell || !IsHealer(obj))
         return false;
     int targetPos[3] = {cell[0] * 256 + 128, cell[1] * 256 + 128, 0};
-    Escort(obj, targetPos);
-    return true;
+    return Escort(obj, targetPos, groupAction == ACT_MOVE);
 }
 
 static __declspec(naked) void HealerClickedAction()
@@ -235,9 +237,11 @@ void InstallHealerEscort()
         return;
     if (!CallSiteLooksRight(h->clickSite, 0x92, h->clickSlot) ||
         !CallSiteLooksRight(h->cellSite, 0x95, h->cellSlot) ||
+        !CallSiteLooksRight(h->moveSite, 0x95, h->cellSlot) ||
         !BytesAt(h->combatDamage, kCombatDamageSig, sizeof(kCombatDamageSig)))
     {
-        SpeedLog("  healer escort: sites %X/%X unexpected, skipped", h->clickSite, h->cellSite);
+        SpeedLog("  healer escort: sites %X/%X/%X unexpected, skipped", h->clickSite, h->cellSite,
+                 h->moveSite);
         return;
     }
     g_healer = h;
@@ -245,5 +249,6 @@ void InstallHealerEscort()
     g_healerCellSlot = h->cellSlot;
     WriteCall(h->clickSite, HealerClickedAction, 6);
     WriteCall(h->cellSite, HealerCellClickedAction, 6);
-    SpeedLog("  healer escort ready at %X and %X", h->clickSite, h->cellSite);
+    WriteCall(h->moveSite, HealerCellClickedAction, 6);
+    SpeedLog("  healer escort ready at %X, %X and %X", h->clickSite, h->cellSite, h->moveSite);
 }
