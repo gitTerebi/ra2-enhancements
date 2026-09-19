@@ -165,6 +165,13 @@ static HCURSOR CursorFor(void *shape, int frame, int w, int h, int hx, int hy)
     return cur;
 }
 
+static HCURSOR FallbackCursor()
+{
+    if (!g_fallback)
+        g_fallback = LoadCursorA(NULL, IDC_ARROW);
+    return g_fallback;
+}
+
 static LONG g_cursorBusy;
 
 extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
@@ -187,11 +194,7 @@ extern "C" __declspec(noinline) void __cdecl OnDrawMouse(BYTE *self)
         want = CursorFor(shape, frame, w, h, hx, hy);
     }
     if (!want)
-    {
-        if (!g_fallback)
-            g_fallback = LoadCursorA(NULL, IDC_ARROW);
-        want = g_fallback;
-    }
+        want = FallbackCursor();
 
     if (!g_wnd || !IsWindow(g_wnd))
     {
@@ -266,18 +269,12 @@ static __declspec(naked) void StubEbx()
 typedef int(WINAPI *ShowCursorProc)(BOOL);
 static ShowCursorProc *g_gameShowCursor;
 
-// CaptureMouse switches from the OS cursor to the software cursor. With the
-// software sprite replaced, apply the logical state instead of hiding the OS
-// cursor unconditionally. Use the game's import so cnc-ddraw tracks the count.
+// Calls go through the game's import slot so cnc-ddraw sees and counts them.
 static void __cdecl OnCaptureMouse(BYTE *self)
 {
-    const BOOL visible = *(const int *)(self + 0x0C) >= 0;
-    if (visible)
+    if (*(const int *)(self + 0x0C) >= 0)
     {
-        HCURSOR cursor = g_applied;
-        if (!cursor)
-            cursor = LoadCursorA(NULL, IDC_ARROW);
-        SetCursor(cursor);
+        SetCursor(g_applied ? g_applied : FallbackCursor());
         while ((*g_gameShowCursor)(TRUE) < 0) {}
     }
     else
@@ -305,33 +302,26 @@ static void InstallCursorHook()
     if (!g_game || !BytesAt(g_game->hook, g_game->signature, 5))
         return;
 
-    const bool yr = strcmp(g_game->name, "gamemd") == 0;
-    const DWORD showEnd = yr ? 0x007B98EC : 0x00772C5C;
-    const DWORD hideEnd = yr ? 0x007B9A23 : 0x00772D93;
-    const DWORD captureHide = yr ? 0x007B9C0B : 0x00772F7B;
-    const DWORD showImport = yr ? 0x007E13DC : 0x0079A3CC;
+    const GameProfile *p = g_game;
     const BYTE skipOSVisibility[] = {0xEB, 0x16};
     BYTE captureCall[] = {0x6A, 0x00, 0xFF, 0x15, 0, 0, 0, 0};
-    memcpy(captureCall + 4, &showImport, sizeof(showImport));
-    if (!BytesAt(showEnd, skipOSVisibility, sizeof(skipOSVisibility)) ||
-        !BytesAt(hideEnd, skipOSVisibility, sizeof(skipOSVisibility)) ||
-        !BytesAt(captureHide, captureCall, sizeof(captureCall)))
+    memcpy(captureCall + 4, &p->showCursorImport, sizeof(p->showCursorImport));
+    if (!BytesAt(p->showEnd, skipOSVisibility, sizeof(skipOSVisibility)) ||
+        !BytesAt(p->hideEnd, skipOSVisibility, sizeof(skipOSVisibility)) ||
+        !BytesAt(p->captureHide, captureCall, sizeof(captureCall)))
     {
         SpeedLog("  hardware cursor: visibility sites differ; no hooks installed");
         return;
     }
 
-    g_gameShowCursor = (ShowCursorProc *)showImport;
-    g_earlyOut = g_game->earlyOut;
-    WriteJmp(g_game->hook, g_game->thisInEbx ? (void *)StubEbx : (void *)StubEax);
+    g_gameShowCursor = (ShowCursorProc *)p->showCursorImport;
+    g_earlyOut = p->earlyOut;
+    WriteJmp(p->hook, p->thisInEbx ? (void *)StubEbx : (void *)StubEax);
 
-    // Keep the software bookkeeping and image update, then fall through to the
-    // game's existing OS ShowCursor loops. These paths run only at logical
-    // visibility transitions (refcount -1 -> 0 and 0 -> -1).
     const BYTE fallThrough[] = {0x90, 0x90};
-    WriteBytes(showEnd, fallThrough, sizeof(fallThrough));
-    WriteBytes(hideEnd, fallThrough, sizeof(fallThrough));
-    WriteCall(captureHide, (void *)CaptureMouseStub, sizeof(captureCall));
+    WriteBytes(p->showEnd, fallThrough, sizeof(fallThrough));
+    WriteBytes(p->hideEnd, fallThrough, sizeof(fallThrough));
+    WriteCall(p->captureHide, (void *)CaptureMouseStub, sizeof(captureCall));
 }
 
 static void InstallAll()

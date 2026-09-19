@@ -33,6 +33,10 @@ struct GameProfile
     DWORD setTacticalPos;
     DWORD scrollHook;
     DWORD mapInstance;
+    DWORD showEnd;
+    DWORD hideEnd;
+    DWORD captureHide;
+    DWORD showCursorImport;
 };
 
 static const BYTE kSigYR[5] = {0x8B, 0x48, 0x04, 0x85, 0xC9};
@@ -43,10 +47,12 @@ static const BYTE kDetectRA2[7] = {0x5B, 0x83, 0xC4, 0x48, 0xC2, 0x0C, 0x00};
 static const GameProfile kProfiles[] = {
     {"gamemd", 0x007B93F9, kSigYR, 0x007B9528, kDetectYR, sizeof(kDetectYR),
      (ConvertClass **)0x0087F6C8, (GetFramePixels_t)0x0069E740, false,
-     0x00887324, 0x006D6000, 0x004F4320, 0x0087F7E8},
+     0x00887324, 0x006D6000, 0x004F4320, 0x0087F7E8,
+     0x007B98EC, 0x007B9A23, 0x007B9C0B, 0x007E13DC},
     {"game", 0x00772746, kSigRA2, 0x00772893, kDetectRA2, sizeof(kDetectRA2),
      (ConvertClass **)0x008323C8, NULL, true,
-     0x0083996C, 0x006A6640, 0x004E09D0, 0x008324E0},
+     0x0083996C, 0x006A6640, 0x004E09D0, 0x008324E0,
+     0x00772C5C, 0x00772D93, 0x00772F7B, 0x0079A3CC},
 };
 
 inline const GameProfile *DetectGame()
