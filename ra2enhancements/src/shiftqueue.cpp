@@ -63,6 +63,9 @@ static void *__fastcall FillEventHook(void *self, void *edx, int player, int kin
 
 void InstallQueueBatch()
 {
+    if (IsDebuggerPresent())
+        return;
+
     const QueueProfile *q = ForThisGame(kQueues);
     if (!q)
         return;

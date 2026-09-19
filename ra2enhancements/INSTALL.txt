@@ -19,7 +19,8 @@ folder (the one with gamemd.exe / game.exe in it).
                    do.
 
   Shift queue      shift-click a sidebar cameo to queue 5 of that unit,
-                   shift right-click to remove 5.
+                   shift right-click to remove 5. Off in Mental Omega,
+                   which already does this.
 
 
 Vanilla Red Alert 2 / Yuri's Revenge
