@@ -12,6 +12,7 @@ static void InstallAll()
     InstallPatch("shift queue", InstallQueueBatch);
     InstallPatch("select voice", InstallSelectVoice);
     InstallPatch("healer escort", InstallHealerEscort);
+    InstallPatch("ranged guard", InstallRangedGuard);
     InstallPatch("quick save", InstallQuickSave);
     InstallPatch("mission start save name", InstallMissionSaveName);
     InstallPatch("hotkey commands", InstallCommands);

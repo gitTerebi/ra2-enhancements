@@ -17,14 +17,25 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   band-box already clear the flag after the first unit; this does the same for those two
   commands.
 - **Shift-queue five.** Shift-click a sidebar cameo to queue 5 of that unit, shift
-  right-click to remove 5.
+  right-click to remove 5. This stays off in Mental Omega, which already does the same.
 - **Healers escort the group.** When a selection attacks, the stock game sends a Repair
   IFV straight at the target, because the vehicle order code treats "can't act on this" as a
   move. Now every healer in the selection (any vehicle or infantry whose weapon does negative
   damage) gets Area Guard anchored on an armed unit from the same selection, the same order
   as a Ctrl+Alt escort. Healers are spread evenly across the width of the army, so each
   armed unit gets its share and each healer stays on its own flank. This covers normal
-  attacks, force attack on buildings and units, and force fire on empty ground.
+  attacks, force attack on buildings and units, force fire on empty ground, and move orders
+  to the ground. A move with no armed unit in the selection stays a plain move. The escort
+  order goes out as a normal network event, so it also works in multiplayer.
+- **Spawner units fight on Guard Area.** Units with `CanPassiveAquire=no` never pick their
+  own targets. Now your own spawner units (any unit with `Spawns=`) pick targets while they
+  are on Guard Area (the Guard Area key, G by default). In stock RA2 that is the Aircraft
+  Carrier, the Dreadnought and the V3 Launcher. Stock Guard Area only looks at cells in the
+  unit's own movement zone, so a ship never picks a land target. These units search their
+  full weapon range with no zone limit instead, which is 25 cells for the Carrier and the
+  Dreadnought and 18 for the V3. An idle unit still waits for orders. Other passive
+  units such as Harriers and Terrorists behave as before, and so do AI units. This works only
+  in campaign and skirmish, because it changes game logic.
 - **Quick save and quick load.** In a campaign mission or a skirmish game, F5 saves over the
   older of `QUICK.SAV` and `QUICK2.SAV`, and F9 loads the newer one. If one quick save is ever
   damaged, the other still holds the save before it. Both keys call the same code as the Save
@@ -148,6 +159,7 @@ three levels above this folder.
 | `src/shiftqueue.cpp` | shift-click queues five |
 | `src/healerescort.cpp` | healer escort hooks |
 | `src/escort.h` | pairs healers with armed units across the width of the army |
+| `src/rangedguard.cpp` | lets your spawner units on Guard Area pick targets at weapon range |
 | `src/RA2Enhancements.dll.inj` | the one Syringe hook that runs the install list |
 
 Every feature installs the same way on both load paths. When the `dsound.dll` proxy loads

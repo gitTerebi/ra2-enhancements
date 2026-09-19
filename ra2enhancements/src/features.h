@@ -6,6 +6,7 @@ void InstallCampaignSpeed();
 void InstallQueueBatch();
 void InstallSelectVoice();
 void InstallHealerEscort();
+void InstallRangedGuard();
 void InstallQuickSave();
 void InstallMissionSaveName();
 void InstallCommands();
