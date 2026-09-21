@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware Mouse Cursor for Red Alert 2 and Yuri's Revenge</title>
+<meta name="description" content="A free hardware mouse cursor for Command &amp; Conquer Red Alert 2, Yuri's Revenge and Mental Omega. The pointer moves at your mouse poll rate instead of the game frame rate, which removes the laggy cursor. Adds WASD map scrolling, game speed keys and quick save. No launcher and no patched game exe.">
+<link rel="canonical" href="https://gitterebi.github.io/ra2-enhancements/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://gitterebi.github.io/ra2-enhancements/">
+<meta property="og:title" content="Hardware Mouse Cursor for Red Alert 2 and Yuri's Revenge">
+<meta property="og:description" content="Free open source add-on that replaces the blitted RA2 cursor with a real Windows cursor, so the pointer stops lagging behind your mouse. Also adds WASD scrolling, game speed keys and quick save.">
+<meta property="og:site_name" content="RA2 Enhancements">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#11161d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M6 3 L6 25 L12 19 L16 28 L20 26 L16 17 L25 17 Z' fill='%23f0b429' stroke='%2311161d' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "RA2 Enhancements",
+  "alternateName": "RA2 HWCursor",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Windows",
+  "description": "A hardware mouse cursor, WASD map scrolling, game speed keys and quick save for Command & Conquer: Red Alert 2, Yuri's Revenge and Mental Omega.",
+  "url": "https://gitterebi.github.io/ra2-enhancements/",
+  "downloadUrl": "https://github.com/gitTerebi/ra2-enhancements/releases",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "gitTerebi", "url": "https://github.com/gitTerebi" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Why does the mouse cursor lag in Red Alert 2?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Red Alert 2 draws its cursor into the frame like any other sprite, so the pointer only moves when the game draws a frame. At the stock 30 frames per second the pointer updates 30 times a second no matter how fast your mouse reports. HWCursor replaces it with a real Windows cursor, which the desktop compositor moves at your mouse poll rate." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does the hardware cursor work in multiplayer?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The cursor DLL changes how the pointer is drawn on your own machine. It does not touch game logic, units or the network protocol, so it cannot desync a game." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work with Mental Omega?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Mental Omega runs Syringe, so you copy HWCursor.dll together with HWCursor.dll.inj into the game folder and skip dsound.dll. Syringe picks the pair up on the next launch." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work with cnc-ddraw?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The cursor is a real Windows cursor, so it sits above whatever the renderer draws. cnc-ddraw is the recommended renderer for upscaling the game." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does replacing dsound.dll break the game audio?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. The dsound.dll in this project forwards all twelve DirectSound exports to the real dsound.dll in C:\\Windows\\SysWOW64, so audio behaves exactly as before. It only exists because vanilla Red Alert 2 has no mod loader." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to patch the game exe?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. You copy DLL files into the game folder and delete them to uninstall. The game exe is never modified on disk." }
+    }
+  ]
+}
+</script>
+<style>
+:root {
+  --bg: #0e1319;
+  --panel: #161d26;
+  --panel-2: #1c2530;
+  --line: #2a3542;
+  --text: #dde5ee;
+  --muted: #94a3b4;
+  --accent: #f0b429;
+  --accent-2: #e35d4a;
+  --link: #7fb2e8;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+a { color: var(--link); }
+a:hover { color: var(--accent); }
+code, kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+kbd { color: var(--accent); }
+
+header.hero {
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(900px 400px at 15% -10%, rgba(240,180,41,0.13), transparent 60%),
+    radial-gradient(700px 400px at 90% 0%, rgba(227,93,74,0.10), transparent 60%);
+  padding: 64px 0 52px;
+}
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+  margin: 0 0 14px;
+}
+h1 {
+  font-size: clamp(30px, 5.6vw, 46px);
+  line-height: 1.12;
+  margin: 0 0 18px;
+  letter-spacing: -0.02em;
+}
+.lede { font-size: clamp(17px, 2.4vw, 19px); color: var(--muted); max-width: 42em; margin: 0 0 12px; }
+.lede strong { color: var(--text); font-weight: 600; }
+.meta { color: var(--muted); font-size: 14px; margin: 22px 0 0; }
+
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.btn {
+  display: inline-block;
+  padding: 11px 20px;
+  border-radius: 7px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.btn:hover { border-color: var(--accent); color: var(--text); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #17130a; }
+.btn.primary:hover { background: #ffc846; color: #17130a; }
+
+section { padding: 52px 0; border-bottom: 1px solid var(--line); }
+h2 { font-size: clamp(22px, 3.4vw, 28px); margin: 0 0 8px; letter-spacing: -0.01em; }
+h3 { font-size: 17px; margin: 0 0 6px; }
+.sub { color: var(--muted); margin: 0 0 26px; max-width: 46em; }
+p { max-width: 46em; }
+
+.cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.card h3 { color: var(--accent); }
+.card p { color: var(--muted); font-size: 15px; margin: 0; }
+
+.compare { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 8px; }
+.compare > div { border-radius: 10px; padding: 18px 20px; border: 1px solid var(--line); background: var(--panel); }
+.compare .before { border-left: 3px solid var(--accent-2); }
+.compare .after { border-left: 3px solid var(--accent); }
+.compare h3 { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.big { font-size: 27px; font-weight: 700; display: block; margin: 6px 0 4px; letter-spacing: -0.01em; }
+.before .big { color: var(--accent-2); }
+.after .big { color: var(--accent); }
+.compare p { font-size: 14px; color: var(--muted); margin: 0; }
+
+table { width: 100%; border-collapse: collapse; margin: 14px 0 6px; font-size: 15px; }
+caption { text-align: left; font-weight: 600; padding-bottom: 8px; color: var(--text); }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+tbody tr:last-child td { border-bottom: none; }
+.tbl { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.scroller { overflow-x: auto; }
+
+ul.plain { padding-left: 20px; color: var(--muted); max-width: 46em; }
+ul.plain li { margin-bottom: 9px; }
+ul.plain strong { color: var(--text); }
+
+details {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 18px;
+  margin-bottom: 10px;
+}
+summary { cursor: pointer; font-weight: 600; padding: 14px 0; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "+"; color: var(--accent); font-family: var(--mono); margin-right: 10px; }
+details[open] summary::before { content: "\2212"; }
+details p { color: var(--muted); margin: 0 0 16px; font-size: 15px; }
+
+footer { padding: 40px 0 60px; color: var(--muted); font-size: 14px; }
+footer p { max-width: 46em; }
+.note { font-size: 13px; color: var(--muted); }
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ffffff;
+    --panel: #f7f9fb;
+    --panel-2: #eef2f6;
+    --line: #dde3ea;
+    --text: #17202b;
+    --muted: #5a6876;
+    --accent: #a26b00;
+    --accent-2: #c0392b;
+    --link: #14568f;
+  }
+  :root:not([data-theme="dark"]) .btn.primary { color: #fff; }
+  :root:not([data-theme="dark"]) .btn.primary:hover { background: #8a5a00; color: #fff; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Free and open source</p>
+    <h1>Hardware mouse cursor for Red&nbsp;Alert&nbsp;2 and Yuri's&nbsp;Revenge</h1>
+    <p class="lede">Red Alert 2 paints its mouse cursor into the frame, so the pointer only moves when the game draws. This add-on gives you a <strong>real Windows cursor</strong> that moves at your mouse poll rate, whatever the game is doing. It also adds WASD map scrolling, game speed keys and quick save.</p>
+    <p class="lede">It works on Red Alert 2, Yuri's Revenge and <strong>Mental Omega</strong>. There is no launcher and no patched game exe. You copy a few DLL files into your game folder, and you delete them to uninstall.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/gitTerebi/ra2-enhancements/releases">Download</a>
+      <a class="btn" href="https://github.com/gitTerebi/ra2-enhancements">Source on GitHub</a>
+      <a class="btn" href="#install">Install guide</a>
+    </div>
+    <p class="meta">MIT licence. 32-bit Windows, matching the game. No game content is included, so you need your own copy of the game.</p>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Why the RA2 cursor feels laggy</h2>
+    <p class="sub">This is the question most people arrive with, so here is the short answer.</p>
+    <p>Red Alert 2 blits its cursor into the frame like any other sprite. The pointer therefore moves once per drawn frame. At the stock 30 frames per second your 1000&nbsp;Hz mouse still only moves the pointer 30 times a second, and every dropped frame freezes it in place. The effect gets worse at high resolutions, where the game draws fewer frames.</p>
+    <p>A hardware cursor is drawn by Windows rather than by the game, so it keeps moving even while the game is busy. That is what <code>HWCursor.dll</code> switches on. The pointer art, colours and hotspots still come from the game's own cursor files, so it looks exactly like Red Alert 2.</p>
+    <div class="compare">
+      <div class="before">
+        <h3>Stock game</h3>
+        <span class="big">30 updates/sec</span>
+        <p>The cursor is a sprite in the frame. It moves only when the game draws, and it stops dead during a stutter.</p>
+      </div>
+      <div class="after">
+        <h3>With HWCursor</h3>
+        <span class="big">Your mouse poll rate</span>
+        <p>Windows draws the cursor. It keeps moving at 125, 500 or 1000&nbsp;Hz no matter what the game does.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What is in the download</h2>
+    <p class="sub">Three folders, each independent. Take only the pieces you want, because every DLL works on its own and deleting one leaves the rest running.</p>
+    <div class="cards">
+      <div class="card">
+        <h3>Hardware cursor</h3>
+        <p>A real Windows cursor built from the game's own cursor art, so the pointer never waits for a frame. Ships as <code>HWCursor.dll</code>.</p>
+      </div>
+      <div class="card">
+        <h3>WASD map scrolling</h3>
+        <p>Smooth sub-pixel map scrolling on W, A, S and D, on top of the arrow keys and edge scroll you already have. Ctrl and Alt are ignored so your hotkeys still work. It is a separate DLL, so leave it out if you do not want it.</p>
+      </div>
+      <div class="card">
+        <h3>Game speed keys</h3>
+        <p><kbd>[</kbd> and <kbd>]</kbd> step the game speed through seven steps from the stock 30&nbsp;fps up to 60&nbsp;fps. The chosen step is written to the game ini and read back on the next launch.</p>
+      </div>
+      <div class="card">
+        <h3>Quick save and quick load</h3>
+        <p><kbd>F5</kbd> saves and <kbd>F9</kbd> loads, in campaign and in skirmish. Two slots rotate, so a damaged save still leaves you the one before it. Both appear in the normal Load menu.</p>
+      </div>
+      <div class="card">
+        <h3>One voice on select all</h3>
+        <p>Select-all-of-type and select-all-combatants used to make every unit shout its select line at once, which clipped the mix. Now one unit answers, the same as a band-box selection.</p>
+      </div>
+      <div class="card">
+        <h3>Shift queue five</h3>
+        <p>Shift-click a sidebar cameo to queue five of that unit, and shift right-click to remove five. This stays off in Mental Omega, which already does it.</p>
+      </div>
+      <div class="card">
+        <h3>Healers escort the group</h3>
+        <p>The stock game sends a Repair IFV straight at the enemy when you attack. Now every healer in the selection guards an armed unit from the same selection instead, spread across the width of your army.</p>
+      </div>
+      <div class="card">
+        <h3>Spawner units fight on Guard Area</h3>
+        <p>Aircraft Carriers, Dreadnoughts and V3 Launchers pick their own targets on Guard Area, at full weapon range and across movement zones, so a ship can finally hit a land target. Campaign and skirmish only.</p>
+      </div>
+      <div class="card">
+        <h3>Resolution tool</h3>
+        <p><code>RA2Video.exe</code> writes the render resolution to the game inis and the window size, position and shader chain to <code>ddraw.ini</code>, for anyone running cnc-ddraw.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="sub">Download the zip and copy files into your game folder, the one holding <code>gamemd.exe</code> or <code>game.exe</code>. Which files you copy depends on whether your game runs Syringe.</p>
+
+    <div class="tbl scroller">
+      <table>
+        <caption>Vanilla Red Alert 2 and Yuri's Revenge</caption>
+        <thead><tr><th>What you want</th><th>Files to copy</th></tr></thead>
+        <tbody>
+          <tr><td>Hardware cursor</td><td><code>dsound.dll</code> + <code>HWCursor.dll</code></td></tr>
+          <tr><td>WASD scrolling</td><td><code>dsound.dll</code> + <code>WasdScroll.dll</code></td></tr>
+          <tr><td>Speed keys, quick save and the engine fixes</td><td><code>dsound.dll</code> + <code>RA2Enhancements.dll</code></td></tr>
+          <tr><td>Everything</td><td><code>dsound.dll</code> and all three feature DLLs</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Vanilla Red Alert 2 has no mod loader, so <code>dsound.dll</code> acts as one. The game statically imports DirectSound, which means Windows loads this file from the game folder before the first game instruction runs. It forwards all twelve DirectSound exports to the real <code>C:\Windows\SysWOW64\dsound.dll</code>, so your audio is untouched, and then it loads whichever feature DLLs it finds beside it.</p>
+
+    <div class="tbl scroller" style="margin-top:26px">
+      <table>
+        <caption>Mental Omega, and anything else running Syringe</caption>
+        <thead><tr><th>What you want</th><th>Files to copy</th></tr></thead>
+        <tbody>
+          <tr><td>Hardware cursor</td><td><code>HWCursor.dll</code> + <code>HWCursor.dll.inj</code></td></tr>
+          <tr><td>WASD scrolling</td><td><code>WasdScroll.dll</code> + <code>WasdScroll.dll.inj</code></td></tr>
+          <tr><td>Speed keys, quick save and the engine fixes</td><td><code>RA2Enhancements.dll</code> + <code>RA2Enhancements.dll.inj</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Syringe scans the game folder for DLL files and picks up the matching <code>.inj</code> on the next launch, so copy each DLL together with its <code>.inj</code>. You do not need <code>dsound.dll</code> here. Check <code>syringe.log</code> to see what loaded. To uninstall anything, delete its files.</p>
+  </div>
+</section>
+
+<section id="compatibility">
+  <div class="wrap">
+    <h2>Compatibility</h2>
+    <ul class="plain">
+      <li><strong>Tested against</strong> Steam Yuri's Revenge 1.001 (<code>gamemd.exe</code>), Red Alert 2 (<code>game.exe</code>) and Mental Omega through Syringe 0.7.3.0.</li>
+      <li><strong>Every DLL checks the exe it lands in</strong> and refuses to patch anything it does not recognise, so a build that does not match your game does nothing rather than crashing.</li>
+      <li><strong>Every code write goes through a guard</strong> that leaves a feature switched off if another mod already changed that code, so this sits alongside other patches instead of fighting them.</li>
+      <li><strong>Multiplayer is safe for the cursor and the camera.</strong> Those change drawing and your own view, not game logic or the network protocol. The two features that do change logic, the spawner Guard Area behaviour and the healer escort, are limited to campaign and skirmish or sent as ordinary network events.</li>
+      <li><strong>cnc-ddraw works fine.</strong> If you upscale the game, <a href="https://github.com/gitTerebi/cnc-ddraw-ra2">cnc-ddraw-ra2</a> is a fork whose <code>fixchilds=5</code> keeps the Red Alert 2 menus clickable at a scaled resolution.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Questions people ask</h2>
+    <details>
+      <summary>Will this get me banned or flagged on CnCNet?</summary>
+      <p>The cursor and the camera changes only affect what your own machine draws. They send nothing and they change no game rule. The features that do touch game logic issue ordinary network events, the same ones the game sends when you click. Nothing here reads memory the game does not already show you.</p>
+    </details>
+    <details>
+      <summary>Does replacing dsound.dll change the sound?</summary>
+      <p>No. That file forwards all twelve DirectSound exports straight to the real <code>dsound.dll</code> in <code>C:\Windows\SysWOW64</code>. It exists only because vanilla Red Alert 2 has no mod loader and DirectSound is the earliest DLL the game loads from its own folder.</p>
+    </details>
+    <details>
+      <summary>Do I have to patch or replace the game exe?</summary>
+      <p>No. Everything is loaded at runtime. The game exe on disk is never modified, so a Steam or Origin file check has nothing to complain about.</p>
+    </details>
+    <details>
+      <summary>Does it work with Mental Omega?</summary>
+      <p>Yes. Mental Omega runs Syringe, so you copy each DLL with its <code>.inj</code> file and skip <code>dsound.dll</code>. Note that Mental Omega needs its own patched build of Syringe, which is a Mental Omega requirement rather than anything to do with this project.</p>
+    </details>
+    <details>
+      <summary>Can I take only the cursor and nothing else?</summary>
+      <p>Yes, and that is the normal case. Each feature is a separate DLL. Copy <code>dsound.dll</code> and <code>HWCursor.dll</code> for the cursor alone, and leave the others out.</p>
+    </details>
+    <details>
+      <summary>Why does the game still feel choppy after I install this?</summary>
+      <p>The cursor moves independently of the frame rate now, but the game itself still draws at its own pace. If the picture is choppy rather than the pointer, look at your renderer and resolution. cnc-ddraw plus a sensible render resolution usually fixes it, and <code>RA2Video.exe</code> in this project sets both.</p>
+    </details>
+    <details>
+      <summary>Is the source available?</summary>
+      <p>Yes, all of it, under the MIT licence. The <a href="https://github.com/gitTerebi/ra2-enhancements">GitHub repository</a> holds the full C++ source, the build scripts and notes on how each game address was found.</p>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><a href="https://github.com/gitTerebi/ra2-enhancements">github.com/gitTerebi/ra2-enhancements</a> &middot; MIT licence &middot; See also <a href="https://github.com/gitTerebi/cnc-ddraw-ra2">cnc-ddraw-ra2</a></p>
+    <p>This project is not affiliated with or endorsed by EA. Command &amp; Conquer, Red Alert 2 and Yuri's Revenge are trademarks of Electronic Arts. No game content is distributed here, so you need your own copy of the game.</p>
+  </div>
+</footer>
+
+</body>
+</html>
