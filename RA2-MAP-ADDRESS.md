@@ -74,3 +74,42 @@ RA2 Scroll_Map delegates to `0x006A8B70`. Its writes at `0x006A8C5A` and
 `0x006A8C62` update pending camera position +0xD74/+0xD78, not the current
 position +0xD64/+0xD68. The extra-frame trigger therefore checks pending position
 changes before invoking the native render update.
+
+## Attack move
+
+Examined 2026-09-27 with Ghidra 12.1.3 headless, pefile and Capstone.
+gamemd.exe SHA-256: `3e81a61775d2745d1dabe397325ef663cd994ffc194da4e998e3bf5d2d308600`.
+Both games carry the same Ctrl+Shift attack move. A click sends a mega mission event.
+`RespondMegaEvent` stores mission `0x1D` with a destination cell or a target object on the
+FootClass, and gives the unit a plain Move or Attack mission.
+
+| Item | RA2 game.exe | YR gamemd.exe |
+| --- | --- | --- |
+| Mega mission, destination, target, fighting flag | `+0x4B4`, `+0x4B8`, `+0x4BC`, `+0x4C1` | `+0x5C4`, `+0x5C8`, `+0x5CC`, `+0x5D1` |
+| Advanced command bar arm function (sets the flag) | `0x006F6570` | `0x00731AF0` |
+| Sticky attack move flag, read by the Ctrl+Shift check | `0x00AC1330` (check `0x006F6670`) | `0x00B0FE58` (check `0x00731BF0`) |
+| Move/Attack to AttackMoveNav/AttackMoveTar converter | `0x006D8F60` | `0x0070F0B0` |
+| CanAttackMove vtable slot | `+0x44C` | `+0x4C0` |
+| UpdateAttackMove (vtable, run on the targeting timer from TechnoClass::AI) | `0x004CDC60` | `0x004DF3A0` |
+| In-range check calls in UpdateAttackMove (destination, target branch) | `0x004CDC85`, `0x004CDD18` | `0x004DF3C5`, `0x004DF458` |
+| Target scan calls in UpdateAttackMove, method 1 | `0x004CDCC2`, `0x004CDD51` | `0x004DF402`, `0x004DF491` |
+| Idle refresh, second "mission is Guard" test | `0x004CDDAA` | `0x004DF4EA` |
+| FootClass DrawActionLines, move line call to the line helper | `0x004CAB73` to `0x006D0510` | `0x004DC323` to `0x007049C0` |
+| Stop event, per techno | `0x004B6E6A` | `0x004C75DA` |
+
+Evidence, YR build (the RA2 build matches instruction for instruction):
+
+* The UICmnds.cpp handler `0x006D0680` calls `0x00731AF0` for the advanced command bar
+  Attack Move button. That function refuses when any selected techno fails CanAttackMove,
+  otherwise it writes 1 to `0x00B0FE58`. `0x00731BF0` returns true while the flag is set,
+  so the next click becomes AttackMoveNav (cursor `0x47`). The left click handler
+  `0x004AB9B0` clears the flag through `0x00731CF0` on every exit, and deselect-all clears it
+  through `0x00731D00`.
+* UpdateAttackMove calls the scan (`0x00709820`) with method 1. The threat search
+  `0x006F8DF0` then uses GetGuardRange(0) (`0x00707E60`), which is 0 unless the type sets
+  GuardRange, so the radius falls back to weapon range plus one cell. With a fighting flag
+  set, a target that fails IsCloseEnoughToAttack (`0x006F78D0`) is dropped. Units on stock
+  attack move therefore rescan each targeting delay, but only inside weapon range.
+* The idle refresh `0x004DF4B0` resumes the attack move only when the fighting flag is set
+  or the mission is Guard, and clears it otherwise. A Stop order leaves the unit in Guard, so
+  stock attack move resumes after Stop.
