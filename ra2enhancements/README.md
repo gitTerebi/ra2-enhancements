@@ -55,12 +55,24 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   particles, and once their particle system is gone a later save crashes on load. Before every
   save the DLL now deletes leaked particles and clears pointers to deleted particle systems, and
   a quick load clears any broken pointers it still finds in an older save.
-- **Real hotkey commands.** Quick Save, Quick Load, Game Speed Down and Game Speed Up are
-  added to the game's own command list, so they sit in the Keyboard options menu and in
-  `[Hotkey]` in `Keyboard.ini` / `KeyboardMD.ini` like any stock command. The game delivers
-  their key presses, so none are missed. On the first launch the DLL binds them to F5, F9,
-  `[` and `]`, and unbinds whatever stock command held those keys (Taunt 1 and Taunt 5 by
-  default). Mental Omega reads the same `KeyboardMD.ini` as Yuri's Revenge.
+- **Attack move on F.** Press F, and the cursor turns into the red attack move cursor. Click
+  the ground and the selection moves there, fighting every enemy on the way. Click an enemy and
+  they attack it. Right-click cancels, because it deselects the group as usual. The units'
+  order lines are yellow while they attack move. This arms the game's own Ctrl+Shift attack
+  move, so it also works in multiplayer. A mixed selection works too: units that can't attack
+  move just move. In campaign and skirmish, your units also fight the way newer games do. Stock
+  attack move only looks for enemies inside weapon range and walks past anything further away.
+  Now, when nothing is in range, a unit also looks as far as Guard Area does (twice its weapon
+  range, at most 16 cells, in its own movement zone), chases what it finds while it stays that
+  close, and goes back to the attack move afterwards. A unit that loses its target also resumes
+  the attack move instead of stopping, and the Stop key (S) now really ends it.
+- **Real hotkey commands.** Quick Save, Quick Load, Game Speed Down, Game Speed Up and Attack
+  Move are added to the game's own command list, so they sit in the Keyboard options menu and
+  in `[Hotkey]` in `Keyboard.ini` / `KeyboardMD.ini` like any stock command. The game delivers
+  their key presses, so none are missed. On the first launch the DLL binds them to F5, F9, `[`,
+  `]` and F, and unbinds whatever stock command held those keys (Taunt 1 and Taunt 5 by
+  default). Rebind Attack Move in the Keyboard menu, under the same category as Guard. Mental
+  Omega reads the same `KeyboardMD.ini` as Yuri's Revenge.
 
 Pairs with [`hwcursor`](../hwcursor) in this repo, which adds a hardware mouse cursor and
 WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
@@ -159,6 +171,7 @@ three levels above this folder.
 | `src/shiftqueue.cpp` | shift-click queues five |
 | `src/healerescort.cpp` | healer escort hooks |
 | `src/escort.h` | pairs healers with armed units across the width of the army |
+| `src/attackmove.cpp` | the Attack Move key, yellow order lines, and the wider attack move search |
 | `src/rangedguard.cpp` | lets your spawner units on Guard Area pick targets at weapon range |
 | `src/RA2Enhancements.dll.inj` | the one Syringe hook that runs the install list |
 

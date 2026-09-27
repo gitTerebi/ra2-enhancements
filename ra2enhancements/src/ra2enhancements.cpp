@@ -15,6 +15,7 @@ static void InstallAll()
     InstallPatch("ranged guard", InstallRangedGuard);
     InstallPatch("quick save", InstallQuickSave);
     InstallPatch("mission start save name", InstallMissionSaveName);
+    InstallPatch("attack move", InstallAttackMove);
     InstallPatch("hotkey commands", InstallCommands);
 }
 

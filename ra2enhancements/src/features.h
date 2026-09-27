@@ -10,6 +10,7 @@ void InstallRangedGuard();
 void InstallQuickSave();
 void InstallMissionSaveName();
 void InstallCommands();
+void InstallAttackMove();
 
 void StepSpeed(int dir);
 bool SinglePlayerMode();
@@ -21,3 +22,5 @@ void QueueQuickSave();
 void QueueQuickLoad();
 
 void ForgetEscorts();
+
+void ArmAttackMove();

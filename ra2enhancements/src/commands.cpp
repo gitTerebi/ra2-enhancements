@@ -1,20 +1,21 @@
 #include "patch.h"
 #include "features.h"
 
-enum { CMD_SPEED_DOWN, CMD_SPEED_UP, CMD_QUICK_SAVE, CMD_QUICK_LOAD };
+enum { CMD_SPEED_DOWN, CMD_SPEED_UP, CMD_QUICK_SAVE, CMD_QUICK_LOAD, CMD_ATTACK_MOVE };
 
-static const wchar_t *g_commandCategory = L"Interface";
 static bool g_commandsReady;
 
 class ModCommand
 {
 public:
-    ModCommand(int action, const char *name, const wchar_t *uiName, const wchar_t *description)
-        : m_action(action), m_name(name), m_uiName(uiName), m_description(description) {}
+    ModCommand(int action, const char *name, const wchar_t *uiName, const wchar_t *description,
+               const wchar_t *category)
+        : m_action(action), m_name(name), m_uiName(uiName), m_description(description),
+          m_category(category) {}
     virtual ~ModCommand() {}
     virtual const char *GetName() const { return m_name; }
     virtual const wchar_t *GetUIName() const { return m_uiName; }
-    virtual const wchar_t *GetUICategory() const { return g_commandCategory; }
+    virtual const wchar_t *GetUICategory() const { return m_category; }
     virtual const wchar_t *GetUIDescription() const { return m_description; }
     virtual bool PreventCombinationOverride(int) const { return false; }
     virtual bool ExtraTriggerCondition(int key) const { return !(key & WWKEY_RELEASE); }
@@ -34,6 +35,9 @@ public:
         case CMD_QUICK_LOAD:
             QueueQuickLoad();
             break;
+        case CMD_ATTACK_MOVE:
+            ArmAttackMove();
+            break;
         }
     }
 
@@ -42,6 +46,7 @@ private:
     const char *m_name;
     const wchar_t *m_uiName;
     const wchar_t *m_description;
+    const wchar_t *m_category;
 };
 
 struct CommandSpec
@@ -51,13 +56,20 @@ struct CommandSpec
     const wchar_t *uiName;
     const wchar_t *description;
     int defaultKey;
+    const char *categoryOf;
 };
 
 static const CommandSpec kCommandSpecs[] = {
-    {CMD_QUICK_SAVE, "QuickSave", L"Quick Save", L"Save over the older of the two quick saves.", VK_F5},
-    {CMD_QUICK_LOAD, "QuickLoad", L"Quick Load", L"Load the newer of the two quick saves.", VK_F9},
-    {CMD_SPEED_DOWN, "GameSpeedDown", L"Game Speed Down", L"Slow the game down one step.", VK_OEM_4},
-    {CMD_SPEED_UP, "GameSpeedUp", L"Game Speed Up", L"Speed the game up one step.", VK_OEM_6},
+    {CMD_QUICK_SAVE, "QuickSave", L"Quick Save", L"Save over the older of the two quick saves.",
+     VK_F5, "Options"},
+    {CMD_QUICK_LOAD, "QuickLoad", L"Quick Load", L"Load the newer of the two quick saves.",
+     VK_F9, "Options"},
+    {CMD_SPEED_DOWN, "GameSpeedDown", L"Game Speed Down", L"Slow the game down one step.",
+     VK_OEM_4, "Options"},
+    {CMD_SPEED_UP, "GameSpeedUp", L"Game Speed Up", L"Speed the game up one step.", VK_OEM_6,
+     "Options"},
+    {CMD_ATTACK_MOVE, "AttackMove", L"Attack Move",
+     L"Click the ground to move there and fight every enemy on the way.", 'F', "GuardObject"},
 };
 
 static ModCommand *g_commands[_countof(kCommandSpecs)];
@@ -162,15 +174,20 @@ static void SeedDefaultKeys()
     }
 }
 
-static void __cdecl RegisterCommands()
+static const wchar_t *CategoryOf(const CommandVector *v, const char *stockName)
 {
-    CommandVector *v = g_commandProfile->commands;
     for (int i = 0; i < v->count; ++i)
     {
         void *cmd = v->items[i];
-        if (cmd && strcmp((*(CommandNameFn **)cmd)[1](cmd), "Options") == 0)
-            g_commandCategory = (*(CommandCategoryFn **)cmd)[3](cmd);
+        if (cmd && strcmp((*(CommandNameFn **)cmd)[1](cmd), stockName) == 0)
+            return (*(CommandCategoryFn **)cmd)[3](cmd);
     }
+    return L"Interface";
+}
+
+static void __cdecl RegisterCommands()
+{
+    CommandVector *v = g_commandProfile->commands;
     int ready = 0;
     for (int c = 0; c < _countof(kCommandSpecs); ++c)
     {
@@ -180,7 +197,8 @@ static void __cdecl RegisterCommands()
             continue;
         }
         const CommandSpec &spec = kCommandSpecs[c];
-        ModCommand *cmd = new ModCommand(spec.action, spec.name, spec.uiName, spec.description);
+        ModCommand *cmd = new ModCommand(spec.action, spec.name, spec.uiName, spec.description,
+                                         CategoryOf(v, spec.categoryOf));
         if (AddCommand(v, cmd))
         {
             g_commands[c] = cmd;
