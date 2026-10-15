@@ -17,7 +17,8 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   band-box already clear the flag after the first unit; this does the same for those two
   commands.
 - **Shift-queue five.** Shift-click a sidebar cameo to queue 5 of that unit, shift
-  right-click to remove 5. This stays off in Mental Omega, which already does the same.
+  right-click to remove 5. This stays off in any mod that loads Ares, such as Mental Omega and
+  C&C Reloaded, because those already do the same.
 - **Healers escort the group.** When a selection attacks, the stock game sends a Repair
   IFV straight at the target, because the vehicle order code treats "can't act on this" as a
   move. Now every healer in the selection (any vehicle or infantry whose weapon does negative

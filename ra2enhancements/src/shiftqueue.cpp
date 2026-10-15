@@ -63,8 +63,11 @@ static void *__fastcall FillEventHook(void *self, void *edx, int player, int kin
 
 void InstallQueueBatch()
 {
-    if (IsDebuggerPresent())
+    if (IsDebuggerPresent() || GetModuleHandleA("Ares.dll"))
+    {
+        SpeedLog("  shift queue off, the mod already queues five");
         return;
+    }
 
     const QueueProfile *q = ForThisGame(kQueues);
     if (!q)
