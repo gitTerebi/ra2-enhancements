@@ -51,6 +51,16 @@ Each folder builds on its own with its own `build.cmd`, and needs the VS 2022 x8
 and into the game folder three levels above the repo, and refuses to build while the game
 is running.
 
+## Deploy to another install
+
+`deploy.ps1 -Target <folder>` copies the add-ons from `_dist` into another Yuri's Revenge
+install, such as a mod folder. It also copies the base game files that folder is missing,
+merges this folder's `KeyboardMD.ini` hotkeys into the target's, and adds the DLLs to a
+CnCNet client's Syringe `-i=` list. It copies cnc-ddraw, `ddraw.ini` and `Shaders` as
+well, unless you pass `-NoRenderer`. `-SyncVideo` recopies the RA2Video settings, and
+`-Music` copies the RA2, RA1 and TD music with its playlist. Every file it replaces is
+backed up once as `*.bak-ra2enh`.
+
 ## Compatibility
 
 Verified against Steam Yuri's Revenge 1.001 (`gamemd.exe`) and Red Alert 2 (`game.exe`),
