@@ -188,8 +188,28 @@ bool WriteJmp(DWORD at, const void *target, size_t len)
     return WriteBranch(0xE9, at, target, len);
 }
 
+static bool FeatureOff(const char *name)
+{
+    char key[64], ini[MAX_PATH], value[16];
+    size_t k = 0;
+    for (const char *c = name; *c && k < sizeof(key) - 1; ++c)
+        if (*c != ' ' && *c != '-')
+            key[k++] = *c;
+    key[k] = 0;
+    if (!BesideExe("RA2Enhancements.ini", ini, sizeof(ini)))
+        return false;
+    GetPrivateProfileStringA("Features", key, "", value, sizeof(value), ini);
+    return lstrcmpiA(value, "no") == 0 || lstrcmpiA(value, "off") == 0 || lstrcmpiA(value, "false") == 0 ||
+           lstrcmpA(value, "0") == 0;
+}
+
 bool InstallPatch(const char *name, void (*install)())
 {
+    if (FeatureOff(name))
+    {
+        SpeedLog("  %s off in RA2Enhancements.ini", name);
+        return false;
+    }
     g_collecting = true;
     g_collectFailed = false;
     g_pendingCount = 0;
