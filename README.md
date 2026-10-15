@@ -54,13 +54,18 @@ is running.
 ## Compatibility
 
 Verified against Steam Yuri's Revenge 1.001 (`gamemd.exe`) and Red Alert 2 (`game.exe`),
-and against Mental Omega via Syringe 0.7.3.0.
+against Mental Omega via Syringe 0.7.3.0, and against C&C Reloaded 2.7.0 (Ares, Phobos and
+SyringeEx).
 
 Every DLL checks the exe it lands in and refuses to patch anything it does not recognise,
 so a mismatched build no-ops rather than crashing. All three DLLs write game code through
 `shared/patchguard.cpp`. Before every write, it compares the bytes in memory with the exe on
 disk. If another mod already changed a site, that feature stays off, `campaignspeed.log`
 names the site, and every other feature still installs.
+
+Phobos hooks the frame pacer and the stop order code. The speed keys then hook the next
+instruction after Phobos's pacer hook, and attack move leaves the stop order to Phobos,
+which clears attack move there itself.
 
 **Multiplayer:** the cursor, the scrolling and the select-all voice fix do not touch game
 logic, units, or the network protocol. The speed keys do not either, but they change how

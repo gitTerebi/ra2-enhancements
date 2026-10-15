@@ -349,14 +349,27 @@ static __declspec(naked) void AlternateDelayPreserveFP()
     }
 }
 
+// Phobos src/Misc/Hooks.Gamespeed.cpp SyncDelay_Start returns 0, so the frame resumes at pacer + 6.
+static const BYTE kAfterPacer[5] = {0x83, 0xEC, 0x18, 0x53, 0x55};
+
 static void InstallAlternatingSpeed(const SpeedProfile *s)
 {
     BYTE pacer[6] = {0x8B, 0x0D};
     *(DWORD *)(pacer + 2) = s->delaySlot - 8;
-    if (!BytesAt(s->pacer, pacer, sizeof(pacer)))
+    DWORD site = s->pacer;
+    const BYTE *stolen = pacer;
+    size_t len = sizeof(pacer);
+    if (!BytesAt(site, pacer, sizeof(pacer)))
     {
-        SpeedLog("  pacer %X unexpected, skipped", s->pacer);
-        return;
+        if (!OtherModJumpAt(s->pacer, pacer, sizeof(pacer)) ||
+            !BytesAt(s->pacer + sizeof(pacer), kAfterPacer, sizeof(kAfterPacer)))
+        {
+            SpeedLog("  pacer %X unexpected, skipped", s->pacer);
+            return;
+        }
+        site = s->pacer + sizeof(pacer);
+        stolen = kAfterPacer;
+        len = sizeof(kAfterPacer);
     }
     if (!ReserveStubs())
         return;
@@ -368,12 +381,17 @@ static void InstallAlternatingSpeed(const SpeedProfile *s)
     EmitCallAbs(AlternateDelayPreserveFP);
     EmitByte(0x9D);
     EmitByte(0x61);
-    Emit(pacer, sizeof(pacer));
-    EmitJmp(s->pacer + sizeof(pacer));
+    Emit(stolen, len);
+    EmitJmp(site + len);
 
-    if (WriteJmp(s->pacer, stub, sizeof(pacer)))
-        SpeedLog("  speed keys ready, start=%s, [ slower, ] faster, hook at %X",
-                 kSteps[g_step].label, s->pacer);
+    if (WriteJmp(site, stub, len))
+        SpeedLog("  speed keys ready, start=%s, [ slower, ] faster, hook at %X%s",
+                 kSteps[g_step].label, site, site == s->pacer ? "" : " after another mod's pacer hook");
+}
+
+static bool SpeedSiteAt(DWORD at, const BYTE *sig, size_t n)
+{
+    return BytesAt(at, sig, n) || OtherModJumpAt(at, sig, n);
 }
 
 void InstallCampaignSpeed()
@@ -395,8 +413,8 @@ void InstallCampaignSpeed()
     *(DWORD *)(options + 2) = s->gameOptions;
     *(DWORD *)(options + 6) = 2;
     static const BYTE delay[5] = {0xB9, 0x02, 0x00, 0x00, 0x00};
-    if (!BytesAt(s->sites[0], options, sizeof(options)) || !BytesAt(s->sites[1], options, sizeof(options)) ||
-        !BytesAt(s->delaySite, delay, sizeof(delay)))
+    if (!SpeedSiteAt(s->sites[0], options, sizeof(options)) ||
+        !SpeedSiteAt(s->sites[1], options, sizeof(options)) || !SpeedSiteAt(s->delaySite, delay, sizeof(delay)))
     {
         SpeedLog("  speed sites %X, %X or %X unexpected, skipped", s->sites[0], s->sites[1], s->delaySite);
         return;

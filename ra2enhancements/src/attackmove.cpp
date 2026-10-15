@@ -250,10 +250,14 @@ void InstallAttackMove()
     const AttackMoveProfile *p = ForThisGame(kAttackMove);
     if (!p)
         return;
+    bool stockStop = BytesAt(p->stopSite, kStopBytes, STOP_LEN);
+    // Phobos src/Misc/Hooks.BugFixes.cpp EventClass_RespondToEvent_Stop clears attack move itself.
+    bool phobosStop = !stockStop && GetModuleHandleA("Phobos.dll") &&
+                      OtherModJumpAt(p->stopSite, kStopBytes, STOP_LEN);
     if (!ArmAt(p) || !SlotCallAt(p->leashSites[0], p->leashSlot) ||
         !SlotCallAt(p->leashSites[1], p->leashSlot) || !SlotCallAt(p->scanSites[0], p->scanSlot) ||
         !SlotCallAt(p->scanSites[1], p->scanSlot) || !IdleCheckAt(p) ||
-        !CallGoesTo(p->lineSite, p->lineFunc) || !BytesAt(p->stopSite, kStopBytes, STOP_LEN))
+        !CallGoesTo(p->lineSite, p->lineFunc) || !(stockStop || phobosStop))
     {
         SpeedLog("  attack move: sites %X/%X/%X unexpected, skipped", p->armFunc, p->idleCheck,
                  p->lineSite);
@@ -271,7 +275,8 @@ void InstallAttackMove()
     }
     WriteJmp(p->idleCheck, IdleCheck, IDLE_CHECK_LEN);
     WriteCall(p->lineSite, LineCall);
-    WriteJmp(p->stopSite, StopCheck, STOP_LEN);
-    SpeedLog("  attack move ready, arm %X, update %X, idle %X, line %X, stop %X", p->armFunc,
-             p->scanSites[0], p->idleCheck, p->lineSite, p->stopSite);
+    if (stockStop)
+        WriteJmp(p->stopSite, StopCheck, STOP_LEN);
+    SpeedLog("  attack move ready, arm %X, update %X, idle %X, line %X, stop %X%s", p->armFunc,
+             p->scanSites[0], p->idleCheck, p->lineSite, p->stopSite, stockStop ? "" : " (Phobos)");
 }

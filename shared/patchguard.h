@@ -28,6 +28,7 @@ bool BesideExe(const char *name, char *out, size_t outSize);
 bool DdrawIniFlag(const char *key);
 
 bool BytesAt(DWORD at, const BYTE *sig, size_t n);
+bool OtherModJumpAt(DWORD at, const BYTE *sig, size_t n);
 bool CallGoesTo(DWORD at, DWORD target);
 
 bool WriteBytes(DWORD at, const BYTE *bytes, size_t n);

@@ -27,6 +27,15 @@ bool BytesAt(DWORD at, const BYTE *sig, size_t n)
     return !IsBadReadPtr((const void *)at, n) && memcmp((const void *)at, sig, n) == 0;
 }
 
+static const BYTE *OriginalBytes(DWORD at, size_t n);
+
+bool OtherModJumpAt(DWORD at, const BYTE *sig, size_t n)
+{
+    const BYTE *orig = OriginalBytes(at, n);
+    return orig && memcmp(orig, sig, n) == 0 && !IsBadReadPtr((const void *)at, 5) &&
+           *(const BYTE *)at == 0xE9;
+}
+
 bool CallGoesTo(DWORD at, DWORD target)
 {
     const BYTE *p = (const BYTE *)at;
