@@ -20,8 +20,7 @@ layout. Read that one before you install.
 ## How the pieces fit
 
 `dsound.dll` from `hwcursor` loads the other DLLs, on vanilla and under Syringe alike, so
-the same files work in every install. Copy them into the folder that holds the exe and
-nothing else needs changing: no `.inj` files, no `-i=` entries, no launcher settings.
+the same files work in every install. Copy them into the folder that holds the exe.
 That covers Mental Omega, C&C Reloaded and its randomizer, and anything else that starts
 `gamemd.exe` from that folder.
 
@@ -54,8 +53,7 @@ is running.
 
 `deploy.ps1 -Target <folder>` copies the add-ons from `_dist` into another Yuri's Revenge
 install, such as a mod folder. It also copies the base game files that folder is missing,
-merges this folder's `KeyboardMD.ini` hotkeys into the target's, and removes the `.inj`
-files and Syringe `-i=` entries that older versions installed. It copies cnc-ddraw,
+merges this folder's `KeyboardMD.ini` hotkeys into the target's. It copies cnc-ddraw,
 `ddraw.ini` and `Shaders` as well, unless you pass `-NoRenderer`. `-SyncVideo` recopies
 the RA2Video settings, and `-Music` copies the RA2, RA1 and TD music with its playlist.
 `-Backup` keeps a copy of each file it replaces as `*.bak-ra2enh`. It copies `ddraw.ini`

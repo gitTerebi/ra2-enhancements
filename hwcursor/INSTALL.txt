@@ -31,8 +31,6 @@ then loads whichever feature DLLs it finds beside it. No launcher, no
 renaming, nothing else.
 
 The same files work on Mental Omega, C&C Reloaded and other Syringe mods.
-No .inj files or -i= entries are needed. Delete any old HWCursor.dll.inj
-and WasdScroll.dll.inj.
 
 
 Uninstall

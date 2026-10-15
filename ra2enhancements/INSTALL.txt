@@ -34,8 +34,7 @@ the exe's folder whatever the working directory is. That proxy forwards all
 untouched, then loads this DLL beside it. No launcher, no renaming.
 
 The same two files work on Mental Omega, C&C Reloaded and other Syringe
-mods. No .inj file or -i= entry is needed. Delete any old
-RA2Enhancements.dll.inj.
+mods.
 
 
 Uninstall

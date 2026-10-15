@@ -45,8 +45,7 @@ The game statically imports DirectSound, so Windows loads our `dsound.dll` from 
 folder whatever the working directory is. It forwards all 12 exports to the real
 `C:\Windows\SysWOW64\dsound.dll`, so **audio is untouched**, then loads whichever of
 `HWCursor.dll` and `WasdScroll.dll` it finds beside it. The same files work on Mental
-Omega and other Syringe mods with no `.inj` files or `-i=` entries. Delete any old
-`HWCursor.dll.inj` and `WasdScroll.dll.inj`.
+Omega and other Syringe mods.
 
 ### Uninstall
 

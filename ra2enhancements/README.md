@@ -94,8 +94,7 @@ Copy files into your game folder (the one with `gamemd.exe` / `game.exe` in it).
 The game statically imports DirectSound, so Windows loads `dsound.dll` from the exe's folder
 whatever the working directory is. That proxy forwards all 12 exports to the real
 `C:\Windows\SysWOW64\dsound.dll`, so **audio is untouched**, then loads this DLL beside it.
-The same two files work on Mental Omega, C&C Reloaded and other Syringe mods, with no `.inj`
-file or `-i=` entry. Delete any old `RA2Enhancements.dll.inj`.
+The same two files work on Mental Omega, C&C Reloaded and other Syringe mods.
 
 ### Uninstall
 

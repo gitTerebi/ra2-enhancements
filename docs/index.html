@@ -49,7 +49,7 @@
     {
       "@type": "Question",
       "name": "Does it work with Mental Omega?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Copy dsound.dll and HWCursor.dll into the game folder, the same as for the unmodded game. dsound.dll loads the cursor after Syringe has set up the mod, with no .inj file or launcher setting needed." }
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Copy dsound.dll and HWCursor.dll into the game folder, the same as for the unmodded game. dsound.dll loads the cursor after Syringe has set up the mod." }
     },
     {
       "@type": "Question",
@@ -312,7 +312,7 @@ footer p { max-width: 46em; }
       </table>
     </div>
     <p class="note"><code>dsound.dll</code> is the loader. The game statically imports DirectSound, which means Windows loads this file from the folder holding the game exe, whichever launcher started it. It forwards all twelve DirectSound exports to the real <code>C:\Windows\SysWOW64\dsound.dll</code>, so your audio is untouched. At the start of the game's main function, after Syringe has set up any mod, it loads whichever feature DLLs it finds beside it.</p>
-    <p class="note">On a Syringe mod you need no <code>.inj</code> files and no <code>-i=</code> entries in the mod's launcher settings. If an older version left <code>HWCursor.dll.inj</code>, <code>WasdScroll.dll.inj</code>, <code>RA2Enhancements.dll.inj</code> or <code>-i=</code> entries for those DLLs, delete them. <code>campaignspeed.log</code> in the game folder lists what loaded. To uninstall anything, delete its files.</p>
+    <p class="note"><code>campaignspeed.log</code> in the game folder lists what loaded. To uninstall anything, delete its files.</p>
   </div>
 </section>
 
@@ -346,7 +346,7 @@ footer p { max-width: 46em; }
     </details>
     <details>
       <summary>Does it work with Mental Omega?</summary>
-      <p>Yes. Copy the same files as for the unmodded game, <code>dsound.dll</code> plus the feature DLLs you want. No <code>.inj</code> files are needed. Note that Mental Omega needs its own patched build of Syringe, which is a Mental Omega requirement rather than anything to do with this project.</p>
+      <p>Yes. Copy the same files as for the unmodded game, <code>dsound.dll</code> plus the feature DLLs you want. Note that Mental Omega needs its own patched build of Syringe, which is a Mental Omega requirement rather than anything to do with this project.</p>
     </details>
     <details>
       <summary>Can I take only the cursor and nothing else?</summary>
