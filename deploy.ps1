@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Target,
     [switch]$NoRenderer,
     [switch]$SyncVideo,
-    [switch]$Music
+    [switch]$Music,
+    [switch]$Backup
 )
 $ErrorActionPreference = 'Stop'
 
@@ -13,7 +14,7 @@ if ($Target -eq $Game) { throw 'Target is the source game folder.' }
 
 $BackupSuffix = '.bak-ra2enh'
 function Backup($path) {
-    if ((Test-Path $path) -and -not (Test-Path "$path$BackupSuffix")) {
+    if ($Backup -and (Test-Path $path) -and -not (Test-Path "$path$BackupSuffix")) {
         Copy-Item $path "$path$BackupSuffix"
     }
 }
@@ -149,24 +150,25 @@ if (-not $NoRenderer) {
     }
     "render Shaders $copied files copied"
 
-    $targetDdrawIni = Join-Path $Target 'ddraw.ini'
-    $firstDeploy = -not (Test-Path "$targetDdrawIni$BackupSuffix")
-    if ($firstDeploy) {
-        "render ddraw.ini $(Copy-IfChanged $ddrawIni $targetDdrawIni)"
-        if (-not (Test-Path "$targetDdrawIni$BackupSuffix")) { Copy-Item $ddrawIni "$targetDdrawIni$BackupSuffix" }
-    }
-    if ($firstDeploy -or $SyncVideo) {
-        Add-Type -Namespace RA2Enh -Name Ini -MemberDefinition @'
+    Add-Type -Namespace RA2Enh -Name Ini -MemberDefinition @'
 [DllImport("kernel32.dll", CharSet = CharSet.Ansi)]
 public static extern int GetPrivateProfileString(string s, string k, string d, System.Text.StringBuilder r, int n, string f);
 [DllImport("kernel32.dll", CharSet = CharSet.Ansi)]
 public static extern bool WritePrivateProfileString(string s, string k, string v, string f);
 '@ -ErrorAction SilentlyContinue
-        function Get-Ini($file, $section, $key) {
-            $sb = New-Object System.Text.StringBuilder 4096
-            $null = [RA2Enh.Ini]::GetPrivateProfileString($section, $key, "`u{1}", $sb, $sb.Capacity, $file)
-            if ($sb.ToString() -eq "`u{1}") { $null } else { $sb.ToString() }
-        }
+    function Get-Ini($file, $section, $key) {
+        $sb = New-Object System.Text.StringBuilder 4096
+        $null = [RA2Enh.Ini]::GetPrivateProfileString($section, $key, "`u{1}", $sb, $sb.Capacity, $file)
+        if ($sb.ToString() -eq "`u{1}") { $null } else { $sb.ToString() }
+    }
+
+    $targetDdrawIni = Join-Path $Target 'ddraw.ini'
+    $firstDeploy = (Get-Ini $targetDdrawIni 'ddraw' 'ra2enh_deployed') -ne '1'
+    if ($firstDeploy) {
+        "render ddraw.ini $(Copy-IfChanged $ddrawIni $targetDdrawIni)"
+        $null = [RA2Enh.Ini]::WritePrivateProfileString('ddraw', 'ra2enh_deployed', '1', $targetDdrawIni)
+    }
+    if ($firstDeploy -or $SyncVideo) {
         Backup $targetDdrawIni
         $videoKeys = 'inject_resolution', 'width', 'height', 'windowed', 'border', 'fullscreen', 'savesettings',
             'center_window', 'posX', 'posY', 'shader', 'ra2video_mode', 'ra2video_border'

@@ -58,8 +58,9 @@ install, such as a mod folder. It also copies the base game files that folder is
 merges this folder's `KeyboardMD.ini` hotkeys into the target's, and adds the DLLs to a
 CnCNet client's Syringe `-i=` list. It copies cnc-ddraw, `ddraw.ini` and `Shaders` as
 well, unless you pass `-NoRenderer`. `-SyncVideo` recopies the RA2Video settings, and
-`-Music` copies the RA2, RA1 and TD music with its playlist. Every file it replaces is
-backed up once as `*.bak-ra2enh`.
+`-Music` copies the RA2, RA1 and TD music with its playlist. `-Backup` keeps a copy of
+each file it replaces as `*.bak-ra2enh`. It copies `ddraw.ini` only once, and marks it
+with `ra2enh_deployed=1`, because RA2Video and CnCNet clients change it afterwards.
 
 ## Compatibility
 
