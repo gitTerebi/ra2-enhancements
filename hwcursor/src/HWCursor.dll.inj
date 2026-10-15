@@ -1,3 +1,0 @@
-; gamemd.exe 1.001 only. Early in WinMain, after Syringe has written every mod's hooks.
-; HWCursor installs its patch from here.
-6BB9A5 = HWCursor_Install, 5

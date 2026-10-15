@@ -28,10 +28,6 @@ EXPORT_FUNC(RA2Enhancements_Install)
 BOOL WINAPI DllMain(HINSTANCE mod, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH)
-    {
         DisableThreadLibraryCalls(mod);
-        if (!IsDebuggerPresent())
-            InstallAll();
-    }
     return TRUE;
 }

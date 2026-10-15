@@ -16,8 +16,8 @@ folder (the one with gamemd.exe / game.exe in it).
                    so hotkeys still work.
 
 
-Vanilla Red Alert 2 / Yuri's Revenge
-------------------------------------
+Any install, vanilla or Syringe
+-------------------------------
 dsound.dll is the loader and does nothing else, so it is always needed.
 
   Cursor          dsound.dll + HWCursor.dll
@@ -25,23 +25,14 @@ dsound.dll is the loader and does nothing else, so it is always needed.
   Both            dsound.dll + HWCursor.dll + WasdScroll.dll
 
 The game imports DirectSound statically, so Windows loads our dsound.dll
-from the game folder before the first instruction runs. It forwards all 12
+from the exe's folder whatever the working directory is. It forwards all 12
 exports to the real C:\Windows\SysWOW64\dsound.dll, so audio is untouched,
 then loads whichever feature DLLs it finds beside it. No launcher, no
 renaming, nothing else.
 
-
-Mental Omega (and anything else on Syringe)
--------------------------------------------
-  Cursor          HWCursor.dll + HWCursor.dll.inj
-  WASD            WasdScroll.dll + WasdScroll.dll.inj
-
-Syringe scans *.dll in the game folder and picks up the matching .inj on
-the next launch. syringe.log will name whichever loaded. Either pair works
-on its own.
-
-dsound.dll is harmless alongside Syringe but is not needed. It detects
-Syringe and stands down, leaving the loading to it.
+The same files work on Mental Omega, C&C Reloaded and other Syringe mods.
+No .inj files or -i= entries are needed. Delete any old HWCursor.dll.inj
+and WasdScroll.dll.inj.
 
 
 Uninstall
@@ -53,7 +44,7 @@ so removing one leaves the other working.
 Also worth having
 -----------------
 RA2Enhancements.dll adds engine fixes and game speed keys. dsound.dll
-loads it the same way, or Syringe picks up its .inj. It is in the same
+loads it the same way. It is in the same
 repo, in the ra2enhancements folder, and in its own release zip.
 
 RA2Video.exe is the resolution and window picker for cnc-ddraw. It is in
@@ -66,11 +57,9 @@ https://github.com/gitTerebi/cnc-ddraw-ra2
 
 Files
 -----
-dsound.dll           DirectSound proxy and loader, vanilla only
-HWCursor.dll         hardware cursor, both load paths
-HWCursor.dll.inj     one Syringe hook that installs the above
-WasdScroll.dll       WASD scroll, both load paths, optional
-WasdScroll.dll.inj   one Syringe hook that installs the above
+dsound.dll           DirectSound proxy and loader, always needed
+HWCursor.dll         hardware cursor
+WasdScroll.dll       WASD scroll, optional
 
 32-bit only, matching the game. Built with the VS 2022 x86 toolset.
 MIT licensed. Not affiliated with or endorsed by EA.

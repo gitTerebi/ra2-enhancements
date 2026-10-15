@@ -23,24 +23,19 @@ folder (the one with gamemd.exe / game.exe in it).
                    loads Ares, which already does this.
 
 
-Vanilla Red Alert 2 / Yuri's Revenge
-------------------------------------
+Any install, vanilla or Syringe
+-------------------------------
   RA2Enhancements.dll  from here
   dsound.dll           from the hwcursor zip, it is the loader
 
 The game imports DirectSound statically, so Windows loads dsound.dll from
-the game folder before the first instruction runs. That proxy forwards all
+the exe's folder whatever the working directory is. That proxy forwards all
 12 exports to the real C:\Windows\SysWOW64\dsound.dll, so audio is
 untouched, then loads this DLL beside it. No launcher, no renaming.
 
-
-Mental Omega (and anything else on Syringe)
--------------------------------------------
-  RA2Enhancements.dll + RA2Enhancements.dll.inj
-
-Syringe scans *.dll in the game folder and picks up the matching .inj on
-the next launch. syringe.log names it when it loads. You do not need
-dsound.dll here.
+The same two files work on Mental Omega, C&C Reloaded and other Syringe
+mods. No .inj file or -i= entry is needed. Delete any old
+RA2Enhancements.dll.inj.
 
 
 Uninstall
@@ -51,7 +46,7 @@ Delete RA2Enhancements.dll. Nothing else depends on it.
 Also worth having
 -----------------
 HWCursor.dll and WasdScroll.dll add a hardware mouse cursor and WASD map
-scrolling, and ship the dsound.dll loader this DLL needs on vanilla. They
+scrolling, and ship the dsound.dll loader this DLL needs. They
 are in the same repo, in the hwcursor folder, and in their own release
 zip.
 
@@ -62,8 +57,7 @@ https://github.com/gitTerebi/cnc-ddraw-ra2
 
 Files
 -----
-RA2Enhancements.dll      engine fixes and speed keys, both load paths
-RA2Enhancements.dll.inj  one Syringe hook that installs the above (gamemd.exe only)
+RA2Enhancements.dll      engine fixes and speed keys, loaded by dsound.dll
 
 32-bit only, matching the game. Built with the VS 2022 x86 toolset.
 MIT licensed. Not affiliated with or endorsed by EA.

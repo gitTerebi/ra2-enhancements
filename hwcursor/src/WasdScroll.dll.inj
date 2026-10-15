@@ -1,3 +1,0 @@
-; gamemd.exe 1.001 only. Early in WinMain, after Syringe has written every mod's hooks.
-; WasdScroll installs its patches from here.
-6BB9A5 = WasdScroll_Install, 5

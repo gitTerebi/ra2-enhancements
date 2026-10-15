@@ -11,7 +11,7 @@ struct REGISTERS
 
 #define EXPORT_FUNC(name) extern "C" __declspec(dllexport) DWORD __cdecl name(REGISTERS *R)
 
-// Syringe.exe 0.7.3.0 also images at 0x00400000 and LoadLibrary/FreeLibrary's our DLLs to resolve .inj exports
+// Syringe.exe 0.7.3.0 also images at 0x00400000
 inline bool HostIsGame()
 {
     char path[MAX_PATH];

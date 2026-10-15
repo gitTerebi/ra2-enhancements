@@ -1,3 +1,0 @@
-; gamemd.exe 1.001 only. Early in WinMain, after Syringe has written every mod's hooks and
-; before the game loads its hotkeys. RA2Enhancements installs all of its patches from here.
-6BB9A5 = RA2Enhancements_Install, 5

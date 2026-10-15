@@ -27,7 +27,7 @@ whose `fixchilds=5` keeps the RA2 menus clickable while the game is upscaled.
 Grab the zip from [Releases](../../releases) and copy files into your game folder (the
 one with `gamemd.exe` / `game.exe` in it).
 
-### Vanilla Red Alert 2 / Yuri's Revenge
+### Any install, vanilla or Syringe
 
 `dsound.dll` is the loader and does nothing else, so it is always needed. Add the
 feature DLLs you want next to it.
@@ -41,24 +41,12 @@ feature DLLs you want next to it.
 `dsound.dll` also loads `RA2Enhancements.dll` from [`ra2enhancements`](../ra2enhancements)
 if you drop that in beside it.
 
-The game statically imports DirectSound, so Windows loads our `dsound.dll` from the game
-folder before the first instruction runs. It forwards all 12 exports to the real
+The game statically imports DirectSound, so Windows loads our `dsound.dll` from the exe's
+folder whatever the working directory is. It forwards all 12 exports to the real
 `C:\Windows\SysWOW64\dsound.dll`, so **audio is untouched**, then loads whichever of
-`HWCursor.dll` and `WasdScroll.dll` it finds beside it. Neither has a loader of its own
-on vanilla.
-
-### Mental Omega (and anything else on Syringe)
-
-| Want | Copy |
-| --- | --- |
-| Cursor | `HWCursor.dll` + `HWCursor.dll.inj` |
-| WASD | `WasdScroll.dll` + `WasdScroll.dll.inj` |
-
-Any pair works on its own. The `.inj` files carry `gamemd.exe` addresses only. Syringe scans `*.dll` in the game folder and picks up the
-matching `.inj` on the next launch. `syringe.log` will name whichever loaded.
-
-`dsound.dll` is harmless alongside Syringe but is not needed — it detects Syringe and
-stands down, leaving the loading to it.
+`HWCursor.dll` and `WasdScroll.dll` it finds beside it. The same files work on Mental
+Omega and other Syringe mods with no `.inj` files or `-i=` entries. Delete any old
+`HWCursor.dll.inj` and `WasdScroll.dll.inj`.
 
 ### Uninstall
 
@@ -121,12 +109,12 @@ into the game folder three levels above this folder.
 | `src/dsoundproxy.cpp` | `dsound.dll` — forwarding and sidecar loading, nothing else |
 | `src/dsoundforward.h` | the 12 DirectSound export thunks |
 
-Both feature DLLs install the same way on either loader. When `dsound.dll` loads a DLL,
-its `DllMain` installs the patches. Under Syringe, `DllMain` runs before Syringe writes any
-hooks, so it waits, and the one hook in the DLL's `.inj` installs the patches early in
-WinMain instead. Every write goes through `InstallPatch` and `WriteJmp` or `WriteCall` in
-`../shared/patchguard.cpp`, which leaves a feature off if another mod already changed its
-code. A new patch never needs its own `.inj` line.
+`dsound.dll` redirects the exe's `GetCurrentThreadId` import when it loads. The exe's first
+call to it, at the top of WinMain, comes after Syringe has written every mod's hooks and
+before the game loads its hotkeys. That call puts the import back, loads the feature DLLs
+and calls each one's `_Install` export. `DllMain` installs nothing. Every write goes through
+`InstallPatch` and `WriteJmp` or `WriteCall` in `../shared/patchguard.cpp`, which leaves a
+feature off if another mod already changed its code.
 
 The hardcoded addresses live in one table in `src/gameprofile.h`, one row per exe. Each
 DLL confirms the exe by matching bytes at an address nothing else patches, never at a

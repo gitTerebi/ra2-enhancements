@@ -49,7 +49,7 @@
     {
       "@type": "Question",
       "name": "Does it work with Mental Omega?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Mental Omega runs Syringe, so you copy HWCursor.dll together with HWCursor.dll.inj into the game folder and skip dsound.dll. Syringe picks the pair up on the next launch." }
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Copy dsound.dll and HWCursor.dll into the game folder, the same as for the unmodded game. dsound.dll loads the cursor after Syringe has set up the mod, with no .inj file or launcher setting needed." }
     },
     {
       "@type": "Question",
@@ -297,11 +297,11 @@ footer p { max-width: 46em; }
 <section id="install">
   <div class="wrap">
     <h2>Install</h2>
-    <p class="sub">Download the zip and copy files into your game folder, the one holding <code>gamemd.exe</code> or <code>game.exe</code>. Which files you copy depends on whether your game runs Syringe.</p>
+    <p class="sub">Download the zip and copy files into your game folder, the one holding <code>gamemd.exe</code> or <code>game.exe</code>. The same files work on unmodded Red Alert 2 and Yuri's Revenge and on Syringe mods such as Mental Omega and C&amp;C Reloaded.</p>
 
     <div class="tbl scroller">
       <table>
-        <caption>Vanilla Red Alert 2 and Yuri's Revenge</caption>
+        <caption>Any install, with or without Syringe</caption>
         <thead><tr><th>What you want</th><th>Files to copy</th></tr></thead>
         <tbody>
           <tr><td>Hardware cursor</td><td><code>dsound.dll</code> + <code>HWCursor.dll</code></td></tr>
@@ -311,20 +311,8 @@ footer p { max-width: 46em; }
         </tbody>
       </table>
     </div>
-    <p class="note">Vanilla Red Alert 2 has no mod loader, so <code>dsound.dll</code> acts as one. The game statically imports DirectSound, which means Windows loads this file from the game folder before the first game instruction runs. It forwards all twelve DirectSound exports to the real <code>C:\Windows\SysWOW64\dsound.dll</code>, so your audio is untouched, and then it loads whichever feature DLLs it finds beside it.</p>
-
-    <div class="tbl scroller" style="margin-top:26px">
-      <table>
-        <caption>Mental Omega, and anything else running Syringe</caption>
-        <thead><tr><th>What you want</th><th>Files to copy</th></tr></thead>
-        <tbody>
-          <tr><td>Hardware cursor</td><td><code>HWCursor.dll</code> + <code>HWCursor.dll.inj</code></td></tr>
-          <tr><td>WASD scrolling</td><td><code>WasdScroll.dll</code> + <code>WasdScroll.dll.inj</code></td></tr>
-          <tr><td>Speed keys, quick save and the engine fixes</td><td><code>RA2Enhancements.dll</code> + <code>RA2Enhancements.dll.inj</code></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="note">Syringe scans the game folder for DLL files and picks up the matching <code>.inj</code> on the next launch, so copy each DLL together with its <code>.inj</code>. You do not need <code>dsound.dll</code> here. Check <code>syringe.log</code> to see what loaded. To uninstall anything, delete its files.</p>
+    <p class="note"><code>dsound.dll</code> is the loader. The game statically imports DirectSound, which means Windows loads this file from the folder holding the game exe, whichever launcher started it. It forwards all twelve DirectSound exports to the real <code>C:\Windows\SysWOW64\dsound.dll</code>, so your audio is untouched. At the start of the game's main function, after Syringe has set up any mod, it loads whichever feature DLLs it finds beside it.</p>
+    <p class="note">On a Syringe mod you need no <code>.inj</code> files and no <code>-i=</code> entries in the mod's launcher settings. If an older version left <code>HWCursor.dll.inj</code>, <code>WasdScroll.dll.inj</code>, <code>RA2Enhancements.dll.inj</code> or <code>-i=</code> entries for those DLLs, delete them. <code>campaignspeed.log</code> in the game folder lists what loaded. To uninstall anything, delete its files.</p>
   </div>
 </section>
 
@@ -332,7 +320,7 @@ footer p { max-width: 46em; }
   <div class="wrap">
     <h2>Compatibility</h2>
     <ul class="plain">
-      <li><strong>Tested against</strong> Steam Yuri's Revenge 1.001 (<code>gamemd.exe</code>), Red Alert 2 (<code>game.exe</code>) and Mental Omega through Syringe 0.7.3.0.</li>
+      <li><strong>Tested against</strong> Steam Yuri's Revenge 1.001 (<code>gamemd.exe</code>), Red Alert 2 (<code>game.exe</code>), Mental Omega through Syringe 0.7.3.0, and C&amp;C Reloaded 2.7.0 with Ares and Phobos, from both its client and its randomizer.</li>
       <li><strong>Every DLL checks the exe it lands in</strong> and refuses to patch anything it does not recognise, so a build that does not match your game does nothing rather than crashing.</li>
       <li><strong>Every code write goes through a guard</strong> that leaves a feature switched off if another mod already changed that code, so this sits alongside other patches instead of fighting them.</li>
       <li><strong>Multiplayer is safe for the cursor and the camera.</strong> Those change drawing and your own view, not game logic or the network protocol. The two features that do change logic, the spawner Guard Area behaviour and the healer escort, are limited to campaign and skirmish or sent as ordinary network events.</li>
@@ -350,7 +338,7 @@ footer p { max-width: 46em; }
     </details>
     <details>
       <summary>Does replacing dsound.dll change the sound?</summary>
-      <p>No. That file forwards all twelve DirectSound exports straight to the real <code>dsound.dll</code> in <code>C:\Windows\SysWOW64</code>. It exists only because vanilla Red Alert 2 has no mod loader and DirectSound is the earliest DLL the game loads from its own folder.</p>
+      <p>No. That file forwards all twelve DirectSound exports straight to the real <code>dsound.dll</code> in <code>C:\Windows\SysWOW64</code>. It exists because DirectSound is a DLL every copy of the game loads from its own folder, so it works as a loader on any install.</p>
     </details>
     <details>
       <summary>Do I have to patch or replace the game exe?</summary>
@@ -358,7 +346,7 @@ footer p { max-width: 46em; }
     </details>
     <details>
       <summary>Does it work with Mental Omega?</summary>
-      <p>Yes. Mental Omega runs Syringe, so you copy each DLL with its <code>.inj</code> file and skip <code>dsound.dll</code>. Note that Mental Omega needs its own patched build of Syringe, which is a Mental Omega requirement rather than anything to do with this project.</p>
+      <p>Yes. Copy the same files as for the unmodded game, <code>dsound.dll</code> plus the feature DLLs you want. No <code>.inj</code> files are needed. Note that Mental Omega needs its own patched build of Syringe, which is a Mental Omega requirement rather than anything to do with this project.</p>
     </details>
     <details>
       <summary>Can I take only the cursor and nothing else?</summary>

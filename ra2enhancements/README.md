@@ -76,7 +76,7 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   Omega reads the same `KeyboardMD.ini` as Yuri's Revenge.
 
 Pairs with [`hwcursor`](../hwcursor) in this repo, which adds a hardware mouse cursor and
-WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
+WASD map scrolling, and ships the `dsound.dll` loader this DLL needs.
 
 32-bit, Windows only, matching the game.
 
@@ -84,26 +84,18 @@ WASD map scrolling, and ships the `dsound.dll` loader this DLL uses on vanilla.
 
 Copy files into your game folder (the one with `gamemd.exe` / `game.exe` in it).
 
-### Vanilla Red Alert 2 / Yuri's Revenge
+### Any install, vanilla or Syringe
 
 | Copy | From |
 | --- | --- |
 | `RA2Enhancements.dll` | here |
 | `dsound.dll` | [`hwcursor`](../hwcursor) |
 
-The game statically imports DirectSound, so Windows loads `dsound.dll` from the game folder
-before the first instruction runs. That proxy forwards all 12 exports to the real
+The game statically imports DirectSound, so Windows loads `dsound.dll` from the exe's folder
+whatever the working directory is. That proxy forwards all 12 exports to the real
 `C:\Windows\SysWOW64\dsound.dll`, so **audio is untouched**, then loads this DLL beside it.
-This DLL has no loader of its own on vanilla.
-
-### Mental Omega (and anything else on Syringe)
-
-Copy `RA2Enhancements.dll` and `RA2Enhancements.dll.inj`. Syringe scans `*.dll` in the game
-folder and picks up the matching `.inj` on the next launch. `syringe.log` names it when it
-loads. You do not need `dsound.dll` here.
-
-The `.inj` holds one hook, early in `gamemd.exe`'s WinMain. Syringe calls it after every mod's
-hooks are written, and the DLL installs all of its patches from there.
+The same two files work on Mental Omega, C&C Reloaded and other Syringe mods, with no `.inj`
+file or `-i=` entry. Delete any old `RA2Enhancements.dll.inj`.
 
 ### Uninstall
 
@@ -160,7 +152,7 @@ three levels above this folder.
 
 | File | What |
 | --- | --- |
-| `src/ra2enhancements.cpp` | the install list, run from `DllMain` or from the Syringe hook |
+| `src/ra2enhancements.cpp` | the install list, run when `dsound.dll` calls `RA2Enhancements_Install` |
 | `src/gameprofile.cpp` | game detection and which ini each game reads |
 | `src/patch.cpp` | the stub page, and `ForThisGame` in `patch.h`, which picks a table's row for the running exe |
 | `../shared/patchguard.cpp` | the log, byte checks, the write guard, and call and jump writes, shared with `hwcursor` |
@@ -174,16 +166,14 @@ three levels above this folder.
 | `src/escort.h` | pairs healers with armed units across the width of the army |
 | `src/attackmove.cpp` | the Attack Move key, yellow order lines, and the wider attack move search |
 | `src/rangedguard.cpp` | lets your spawner units on Guard Area pick targets at weapon range |
-| `src/RA2Enhancements.dll.inj` | the one Syringe hook that runs the install list |
 
-Every feature installs the same way on both load paths. When the `dsound.dll` proxy loads
-the DLL, `DllMain` runs the install list. Under Syringe (`IsDebuggerPresent`), `DllMain` runs
-before Syringe writes any hooks, so it waits, and the `.inj` hook runs the list instead.
+`dsound.dll` calls `RA2Enhancements_Install` on the exe's first `GetCurrentThreadId` call, at
+the top of WinMain. Syringe has written every mod's hooks by then, and the hotkeys have not
+loaded yet. `DllMain` installs nothing.
 
 `InstallPatch` in `../shared/patchguard.cpp` wraps each feature. It collects the feature's writes, checks
 each site against the exe on disk, and applies all of them or none. A new feature needs only
-a line in the install list and its writes through `WriteCall`, `WriteJmp` or `WriteBytes`. It
-never needs its own `.inj` entry.
+a line in the install list and its writes through `WriteCall`, `WriteJmp` or `WriteBytes`.
 
 `IsDebuggerPresent` also tells Mental Omega from stock Yuri's Revenge: both run the same
 `gamemd.exe`, but MO always launches through Syringe and reads `RA2MO.ini`.

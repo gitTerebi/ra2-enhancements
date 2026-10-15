@@ -37,17 +37,19 @@ foreach ($f in $BaseFiles) {
     "base   $f copied"
 }
 
-$Syringe = Test-Path (Join-Path $Target 'Syringe.exe')
 $AddOns = @(
-    @{ Dir = 'ra2enhancements\_dist'; Files = 'RA2Enhancements.dll', 'RA2Enhancements.dll.inj' },
-    @{ Dir = 'hwcursor\_dist'; Files = 'HWCursor.dll', 'HWCursor.dll.inj', 'WasdScroll.dll', 'WasdScroll.dll.inj' }
+    @{ Dir = 'ra2enhancements\_dist'; Files = @('RA2Enhancements.dll') },
+    @{ Dir = 'hwcursor\_dist'; Files = 'dsound.dll', 'HWCursor.dll', 'WasdScroll.dll' },
+    @{ Dir = 'ra2video\_dist'; Files = @('RA2Video.exe') }
 )
-$AddOns += @{ Dir = 'ra2video\_dist'; Files = @('RA2Video.exe') }
-if (-not $Syringe) { $AddOns += @{ Dir = 'hwcursor\_dist'; Files = @('dsound.dll') } }
 foreach ($a in $AddOns) {
     foreach ($f in $a.Files) {
         "addon  $f $(Copy-IfChanged (Join-Path $Repo "$($a.Dir)\$f") (Join-Path $Target $f))"
     }
+}
+foreach ($f in 'RA2Enhancements.dll.inj', 'HWCursor.dll.inj', 'WasdScroll.dll.inj') {
+    $old = Join-Path $Target $f
+    if (Test-Path $old) { Remove-Item $old; "addon  $f removed, dsound.dll loads the add-ons now" }
 }
 
 $Bytes = [Text.Encoding]::GetEncoding(28591)
@@ -57,24 +59,21 @@ function Write-Lines($path, $lines) {
     [IO.File]::WriteAllText($path, $text, $Bytes)
 }
 
-# Syringe.exe logs "DLL load was prevented" for any .inj DLL not named by an -i= argument.
 $ClientDefs = Join-Path $Target 'Resources\ClientDefinitions.ini'
 if (Test-Path $ClientDefs) {
     $lines = Read-Lines $ClientDefs
     $changed = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -notmatch '^ExtraCommandLineParams=.*-i=') { continue }
         foreach ($dll in 'RA2Enhancements.dll', 'HWCursor.dll', 'WasdScroll.dll') {
-            if ($lines[$i] -match "-i=$([regex]::Escape($dll))(\s|$)") { continue }
-            $lines[$i] = $lines[$i] -replace '(-i=\S+)(?!.*-i=)', "`$1 -i=$dll"
-            $changed = $true
+            $stripped = $lines[$i] -replace " -i=$([regex]::Escape($dll))(?=\s|$)", ''
+            if ($stripped -ne $lines[$i]) { $lines[$i] = $stripped; $changed = $true }
         }
     }
     if ($changed) {
         Backup $ClientDefs
         Write-Lines $ClientDefs $lines
-        'client ExtraCommandLineParams now loads the add-on DLLs'
-    } else { 'client ExtraCommandLineParams already loads the add-on DLLs or uses no -i=' }
+        'client add-on -i= entries removed, dsound.dll loads the add-ons now'
+    }
 }
 
 if ($Music) {

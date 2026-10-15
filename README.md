@@ -19,20 +19,19 @@ layout. Read that one before you install.
 
 ## How the pieces fit
 
-On vanilla Red Alert 2 and Yuri's Revenge there is no mod loader, so `dsound.dll` from
-`hwcursor` acts as one. The game statically imports DirectSound, so Windows loads our
-`dsound.dll` from the game folder before the first instruction runs. It forwards all 12
-exports to the real `C:\Windows\SysWOW64\dsound.dll`, which leaves **audio untouched**,
-then loads whichever of `HWCursor.dll`, `WasdScroll.dll` and `RA2Enhancements.dll` it
-finds beside it. That is why `hwcursor` is worth copying even if you only want the speed
-keys.
+`dsound.dll` from `hwcursor` loads the other DLLs, on vanilla and under Syringe alike, so
+the same files work in every install. Copy them into the folder that holds the exe and
+nothing else needs changing: no `.inj` files, no `-i=` entries, no launcher settings.
+That covers Mental Omega, C&C Reloaded and its randomizer, and anything else that starts
+`gamemd.exe` from that folder.
 
-On Mental Omega, and anything else running Syringe, you do not need `dsound.dll`. Syringe
-scans `*.dll` in the game folder and picks up the matching `.inj` file, so copy the DLL
-and its `.inj` together. Each `.inj` holds one hook early in WinMain, and each DLL installs
-its patches from that hook, after Syringe has written every other mod's hooks. One binary
-serves both load paths, and deleting any DLL leaves the others working. Syringe ignores an
-`.inj` whose DLL is gone.
+The game statically imports DirectSound, so Windows loads our `dsound.dll` from the exe's
+folder whatever the working directory is. It forwards all 12 exports to the real
+`C:\Windows\SysWOW64\dsound.dll`, which leaves **audio untouched**. It then waits for the
+exe's first call to `GetCurrentThreadId`, the first import call in WinMain. Syringe has
+written every mod's hooks by then. At that point it loads whichever of `HWCursor.dll`,
+`WasdScroll.dll` and `RA2Enhancements.dll` it finds beside it and calls each one's
+`_Install` export. Deleting any DLL leaves the others working.
 
 `RA2Video.exe` is a standalone tool. It edits ini files and never loads into the game, so
 it does not care which of the above you use. It does assume you render through
@@ -55,12 +54,13 @@ is running.
 
 `deploy.ps1 -Target <folder>` copies the add-ons from `_dist` into another Yuri's Revenge
 install, such as a mod folder. It also copies the base game files that folder is missing,
-merges this folder's `KeyboardMD.ini` hotkeys into the target's, and adds the DLLs to a
-CnCNet client's Syringe `-i=` list. It copies cnc-ddraw, `ddraw.ini` and `Shaders` as
-well, unless you pass `-NoRenderer`. `-SyncVideo` recopies the RA2Video settings, and
-`-Music` copies the RA2, RA1 and TD music with its playlist. `-Backup` keeps a copy of
-each file it replaces as `*.bak-ra2enh`. It copies `ddraw.ini` only once, and marks it
-with `ra2enh_deployed=1`, because RA2Video and CnCNet clients change it afterwards.
+merges this folder's `KeyboardMD.ini` hotkeys into the target's, and removes the `.inj`
+files and Syringe `-i=` entries that older versions installed. It copies cnc-ddraw,
+`ddraw.ini` and `Shaders` as well, unless you pass `-NoRenderer`. `-SyncVideo` recopies
+the RA2Video settings, and `-Music` copies the RA2, RA1 and TD music with its playlist.
+`-Backup` keeps a copy of each file it replaces as `*.bak-ra2enh`. It copies `ddraw.ini`
+only once, and marks it with `ra2enh_deployed=1`, because RA2Video and CnCNet clients
+change it afterwards.
 
 ## Compatibility
 

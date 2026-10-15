@@ -25,14 +25,10 @@ for %%F in (HWCursor.dll WasdScroll.dll dsound.dll) do (
     copy /y "%%F" "%GAME%\%%F" >nul || (echo ERROR: copy %%F to game folder failed. & set "COPYFAIL=1")
     copy /y "%%F" "%ROOT%_dist\%%F" >nul || (echo ERROR: copy %%F to _dist failed. & set "COPYFAIL=1")
 )
-for %%F in (HWCursor.dll.inj WasdScroll.dll.inj) do (
-    copy /y "%ROOT%src\%%F" "%GAME%\%%F" >nul || (echo ERROR: copy %%F failed. & set "COPYFAIL=1")
-    copy /y "%ROOT%src\%%F" "%ROOT%_dist\%%F" >nul || (echo ERROR: copy %%F failed. & set "COPYFAIL=1")
-)
 copy /y "%ROOT%INSTALL.txt" "%ROOT%_dist\README.txt" >nul
 if defined COPYFAIL exit /b 1
 
 echo.
-echo dsound.dll    -^> proxy only, loads whichever feature DLLs are present (vanilla)
-echo HWCursor.dll  -^> hardware cursor      + .inj for Syringe
-echo WasdScroll.dll-^> WASD map scrolling   + .inj for Syringe, optional
+echo dsound.dll    -^> proxy, loads whichever feature DLLs are present, with or without Syringe
+echo HWCursor.dll  -^> hardware cursor
+echo WasdScroll.dll-^> WASD map scrolling, optional

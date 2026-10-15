@@ -21,10 +21,8 @@ if not exist "%ROOT%_dist" mkdir "%ROOT%_dist"
 set "COPYFAIL="
 copy /y "RA2Enhancements.dll" "%GAME%\RA2Enhancements.dll" >nul || (echo ERROR: copy RA2Enhancements.dll to game folder failed. & set "COPYFAIL=1")
 copy /y "RA2Enhancements.dll" "%ROOT%_dist\RA2Enhancements.dll" >nul || (echo ERROR: copy RA2Enhancements.dll to _dist failed. & set "COPYFAIL=1")
-copy /y "%ROOT%src\RA2Enhancements.dll.inj" "%GAME%\RA2Enhancements.dll.inj" >nul || (echo ERROR: copy RA2Enhancements.dll.inj failed. & set "COPYFAIL=1")
-copy /y "%ROOT%src\RA2Enhancements.dll.inj" "%ROOT%_dist\RA2Enhancements.dll.inj" >nul || (echo ERROR: copy RA2Enhancements.dll.inj failed. & set "COPYFAIL=1")
 copy /y "%ROOT%INSTALL.txt" "%ROOT%_dist\README.txt" >nul
 if defined COPYFAIL exit /b 1
 
 echo.
-echo RA2Enhancements.dll -^> engine fixes, game speed keys + .inj for Syringe
+echo RA2Enhancements.dll -^> engine fixes, game speed keys, loaded by dsound.dll
