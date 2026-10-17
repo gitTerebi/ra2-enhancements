@@ -76,16 +76,6 @@ Phobos hooks the frame pacer and the stop order code. The speed keys then hook t
 instruction after Phobos's pacer hook, and attack move leaves the stop order to Phobos,
 which clears attack move there itself.
 
-To turn a feature off in one install, put `RA2Enhancements.ini` beside the game exe:
-
-```ini
-[Features]
-ShiftQueue=no
-```
-
-The key is the feature's name from `campaignspeed.log` without spaces or hyphens, and
-`no`, `off`, `false` or `0` turns it off.
-
 **Multiplayer:** the cursor, the scrolling and the select-all voice fix do not touch game
 logic, units, or the network protocol. The speed keys do not either, but they change how
 fast the local client paces frames, and the RA2 netcode does not expect a client running
