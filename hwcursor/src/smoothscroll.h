@@ -12,6 +12,7 @@ namespace SmoothScroll
     static const BYTE kSetPosSig[5] = {0x83, 0xEC, 0x08, 0x56, 0x57};
     static const int kPosX = 0xD64;
     static const int kPosY = 0xD68;
+    static const int kPanRate = 0xD8;
 
     static double g_freq;
     static LONGLONG g_last;
@@ -24,7 +25,13 @@ namespace SmoothScroll
         return BytesAt(setPos, kSetPosSig, sizeof(kSetPosSig));
     }
 
-    inline void Tick(DWORD instance, DWORD setPos)
+    inline bool GameOwnsCamera(DWORD instance, DWORD inputLocked)
+    {
+        BYTE *tac = *(BYTE **)instance;
+        return *(BYTE *)inputLocked || (tac && *(float *)(tac + kPanRate) != 0.0f);
+    }
+
+    inline void Tick(DWORD instance, DWORD setPos, DWORD inputLocked)
     {
         g_moved = false;
         void *tac = *(void **)instance;
@@ -53,6 +60,7 @@ namespace SmoothScroll
 
         int dx = 0, dy = 0;
         if (pid == GetCurrentProcessId() &&
+            !GameOwnsCamera(instance, inputLocked) &&
             !(GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
             !(GetAsyncKeyState(VK_MENU) & 0x8000))
         {

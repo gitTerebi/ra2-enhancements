@@ -48,7 +48,7 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         return;
     g_rendering = true;
     LONGLONG start = PresentClock::Now();
-    SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
+    SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos, g_game->inputLocked);
     bool rightMoved = RightScroll::Tick(g_game->mapInstance, g_game->tacticalInstance);
     bool moved = SmoothScroll::g_moved || rightMoved;
     if (moved)
@@ -68,7 +68,8 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
 
 static bool ScrollInputActive()
 {
-    if (!*(void **)g_game->tacticalInstance)
+    if (!*(void **)g_game->tacticalInstance ||
+        SmoothScroll::GameOwnsCamera(g_game->tacticalInstance, g_game->inputLocked))
         return false;
     DWORD pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
@@ -99,7 +100,7 @@ extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map)
     {
         DrawProfiler::StartOnThisThread(&g_rendering);
         LONGLONG start = PresentClock::Now();
-        SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos);
+        SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos, g_game->inputLocked);
         CamTrace(1, start, SmoothScroll::g_moved);
     }
 }
