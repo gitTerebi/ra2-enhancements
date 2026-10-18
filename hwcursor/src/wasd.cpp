@@ -5,6 +5,7 @@
 #include "rightscroll.h"
 #include "unitcache.h"
 #include "framereuse.h"
+#include "layerfilter.h"
 #include "profiler.h"
 
 static const GameProfile *g_game;
@@ -171,6 +172,8 @@ static void InstallAll()
         SpeedLog("  unit image reuse %s%s", reuse ? "ready" : "off", UnitCache::g_check ? ", checking only" : "");
         bool frames = InstallPatch("frame reuse", FrameReuse::Install);
         SpeedLog("  frame reuse %s%s", frames ? "ready" : "off", FrameReuse::g_check ? ", checking only" : "");
+        bool filter = InstallPatch("tree and building filter", LayerFilter::Install);
+        SpeedLog("  tree and building filter %s%s", filter ? "ready" : "off", LayerFilter::g_check ? ", checking only" : "");
     }
 }
 
