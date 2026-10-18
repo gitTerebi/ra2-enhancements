@@ -3,6 +3,7 @@ setlocal
 set "VC=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
 set "ROOT=%~dp0"
 set "GAME=%~dp0..\..\.."
+if not defined FM set "FM=G:\games\FM"
 
 tasklist /fi "imagename eq game.exe" 2>nul | find /i "game.exe" >nul && (
     echo ERROR: game.exe is running, close it before building. & exit /b 1
@@ -24,6 +25,9 @@ set "COPYFAIL="
 for %%F in (HWCursor.dll WasdScroll.dll dsound.dll) do (
     copy /y "%%F" "%GAME%\%%F" >nul || (echo ERROR: copy %%F to game folder failed. & set "COPYFAIL=1")
     copy /y "%%F" "%ROOT%_dist\%%F" >nul || (echo ERROR: copy %%F to _dist failed. & set "COPYFAIL=1")
+    if exist "%FM%\gamemd.exe" (
+        copy /y "%%F" "%FM%\%%F" >nul || (echo ERROR: copy %%F to %FM% failed. & set "COPYFAIL=1")
+    )
 )
 copy /y "%ROOT%INSTALL.txt" "%ROOT%_dist\README.txt" >nul
 if defined COPYFAIL exit /b 1

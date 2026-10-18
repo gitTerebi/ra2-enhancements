@@ -34,7 +34,9 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   Carrier, the Dreadnought and the V3 Launcher. Stock Guard Area only looks at cells in the
   unit's own movement zone, so a ship never picks a land target. These units search their
   full weapon range with no zone limit instead, which is 25 cells for the Carrier and the
-  Dreadnought and 18 for the V3. An idle unit still waits for orders. Other passive
+  Dreadnought and 18 for the V3. They hold their position: when a target leaves weapon range,
+  the unit drops it and picks another one in range instead of chasing it. An idle unit still
+  waits for orders. Other passive
   units such as Harriers and Terrorists behave as before, and so do AI units. This works only
   in campaign and skirmish, because it changes game logic.
 - **Quick save and quick load.** In a campaign mission or a skirmish game, F5 saves over the
