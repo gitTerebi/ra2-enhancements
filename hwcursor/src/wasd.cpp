@@ -3,6 +3,8 @@
 #include "gameprofile.h"
 #include "smoothscroll.h"
 #include "rightscroll.h"
+#include "unitcache.h"
+#include "framereuse.h"
 #include "profiler.h"
 
 static const GameProfile *g_game;
@@ -56,10 +58,12 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         void *tactical = *(void **)g_game->tacticalInstance;
         void *map = (void *)g_game->mapInstance;
         typedef void (__thiscall *Method)(void *);
+        FrameReuse::g_scrollFrame = true;
         // Original idle-render sequence at RA2 540A61 / YR 55E261.
         (*(Method **)tactical)[0x5C / 4](tactical);
         // GScreenClass::DrawOnTop renders layers and presents the complete scene.
         (*(Method **)map)[0x3C / 4](map);
+        FrameReuse::g_scrollFrame = false;
         PresentClock::RecordCost(PresentClock::Now() - start, start);
     }
     CamTrace(rightMoved ? 2 : 0, start, moved);
@@ -161,6 +165,13 @@ static void InstallAll()
         RightScroll::g_profile = NULL;
     SpeedLog("  WASD scroll ready at %X, right-drag scroll %s", g_game->scrollHook,
              RightScroll::g_profile ? "ready" : "off");
+    if (strcmp(g_game->name, "gamemd") == 0)
+    {
+        bool reuse = InstallPatch("unit image reuse", UnitCache::Install);
+        SpeedLog("  unit image reuse %s%s", reuse ? "ready" : "off", UnitCache::g_check ? ", checking only" : "");
+        bool frames = InstallPatch("frame reuse", FrameReuse::Install);
+        SpeedLog("  frame reuse %s%s", frames ? "ready" : "off", FrameReuse::g_check ? ", checking only" : "");
+    }
 }
 
 EXPORT_FUNC(WasdScroll_Install)
