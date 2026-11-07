@@ -156,9 +156,11 @@ static int g_pacedStep = -1;
 typedef void (__cdecl *RenderScrollFrameFn)();
 typedef LONGLONG (__cdecl *ScrollRenderDueFn)(LONGLONG now);
 typedef LONGLONG (__cdecl *ScrollRenderCostFn)();
+typedef LONGLONG (__cdecl *ScrollTickAtFn)(LONGLONG deadline);
 static RenderScrollFrameFn g_renderScrollFrame;
 static ScrollRenderDueFn g_scrollRenderDue;
 static ScrollRenderCostFn g_scrollRenderCost;
+static ScrollTickAtFn g_scrollTickAt;
 static FILE *g_paceTrace;
 static int g_paceTraceLines;
 static int g_scrollDraws, g_scrollSkips;
@@ -201,12 +203,13 @@ static void FindScrollRenderer()
     g_renderScrollFrame = (RenderScrollFrameFn)GetProcAddress(scroll, "RenderScrollFrame");
     g_scrollRenderDue = (ScrollRenderDueFn)GetProcAddress(scroll, "ScrollRenderDue");
     g_scrollRenderCost = (ScrollRenderCostFn)GetProcAddress(scroll, "ScrollRenderCost");
+    g_scrollTickAt = (ScrollTickAtFn)GetProcAddress(scroll, "ScrollTickAt");
 }
 
-static void WaitUntil(LONGLONG wake, LARGE_INTEGER &now)
+static void WaitUntil(LONGLONG wake, LARGE_INTEGER &now, bool precise)
 {
     LONGLONG remain = wake - now.QuadPart;
-    LONGLONG spin = g_qpcFreq / 4000;
+    LONGLONG spin = precise ? g_qpcFreq / 4000 : 0;
     if (g_paceTimer && remain > spin)
     {
         LARGE_INTEGER due;
@@ -264,7 +267,7 @@ static void ScrollDrawsUntil(LONGLONG deadline, LARGE_INTEGER &now, PollFn poll)
         LONGLONG wake = due > now.QuadPart && due < deadline - cost ? due : deadline;
         if (poll && wake > now.QuadPart + g_qpcFreq / 500)
             wake = now.QuadPart + g_qpcFreq / 500;
-        WaitUntil(wake, now);
+        WaitUntil(wake, now, wake == deadline);
     }
 }
 
@@ -290,8 +293,9 @@ static void PaceFrame(int fps)
         return;
     }
 
-    LONGLONG deadline = g_nextFrame;
-    ScrollDrawsUntil(g_nextFrame, now, NULL);
+    FindScrollRenderer();
+    LONGLONG deadline = g_scrollTickAt ? g_scrollTickAt(g_nextFrame) : g_nextFrame;
+    ScrollDrawsUntil(deadline, now, NULL);
     PaceTrace(entry, deadline, period, false, now.QuadPart);
     g_nextFrame += period;
 }

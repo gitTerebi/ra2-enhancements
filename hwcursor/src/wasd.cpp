@@ -12,6 +12,8 @@ static const GameProfile *g_game;
 static bool g_scrollHooked;
 static DWORD g_scrollResume;
 static bool g_rendering;
+static LONGLONG g_tickStart;
+static bool g_tickMoved;
 static FILE *g_camTrace;
 static int g_camTraceLines;
 
@@ -51,7 +53,10 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         return;
     g_rendering = true;
     LONGLONG start = PresentClock::Now();
-    SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos, g_game->inputLocked);
+    bool fresh = FrameReuse::g_installed && FrameReuse::Fresh();
+    SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos, g_game->inputLocked,
+                       fresh ? PresentClock::ShownTarget(start, PresentClock::g_freshCost)
+                             : PresentClock::CameraTarget(start));
     bool rightMoved = RightScroll::Tick(g_game->mapInstance, g_game->tacticalInstance);
     bool moved = SmoothScroll::g_moved || rightMoved;
     if (moved)
@@ -65,7 +70,10 @@ extern "C" __declspec(dllexport) void __cdecl RenderScrollFrame()
         // GScreenClass::DrawOnTop renders layers and presents the complete scene.
         (*(Method **)map)[0x3C / 4](map);
         FrameReuse::g_scrollFrame = false;
-        PresentClock::RecordCost(PresentClock::Now() - start, start);
+        LONGLONG cost = PresentClock::Now() - start;
+        PresentClock::RecordCost(cost, start);
+        if (FrameReuse::g_installed)
+            PresentClock::AddCost(fresh ? PresentClock::g_freshCost : PresentClock::g_reuseCost, cost);
     }
     CamTrace(rightMoved ? 2 : 0, start, moved);
     g_rendering = false;
@@ -89,25 +97,64 @@ static bool ScrollInputActive()
 
 extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderDue(LONGLONG now)
 {
-    if (!g_scrollHooked || !ScrollInputActive())
+    FrameReuse::g_scrollInput = g_scrollHooked && ScrollInputActive();
+    if (!FrameReuse::g_scrollInput)
         return MAXLONGLONG;
     return PresentClock::RenderDue(now);
 }
 
+extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollTickAt(LONGLONG deadline)
+{
+    if (!g_scrollHooked || !FrameReuse::g_scrollInput)
+        return deadline;
+    return PresentClock::TickAt(deadline);
+}
+
 extern "C" __declspec(dllexport) LONGLONG __cdecl ScrollRenderCost()
 {
+    if (FrameReuse::g_installed && !FrameReuse::Fresh() && PresentClock::g_reuseCost.value)
+        return PresentClock::g_reuseCost.value;
     return PresentClock::g_renderBudget;
 }
 
-extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map)
+static const DWORD kTickInputReturn = 0x0055D8B0;
+
+extern "C" __declspec(noinline) void __cdecl ScrollTickC(void *map, DWORD caller)
 {
     if (map == (void *)g_game->mapInstance)
     {
         DrawProfiler::StartOnThisThread(&g_rendering);
         LONGLONG start = PresentClock::Now();
-        SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos, g_game->inputLocked);
+        bool tick = caller == kTickInputReturn;
+        SmoothScroll::Tick(g_game->tacticalInstance, g_game->setTacticalPos, g_game->inputLocked,
+                           tick ? PresentClock::ShownTarget(start, PresentClock::g_tickCost)
+                                : PresentClock::CameraTarget(start));
+        g_tickStart = tick ? start : 0;
+        g_tickMoved = SmoothScroll::g_moved;
         CamTrace(1, start, SmoothScroll::g_moved);
     }
+}
+
+static const DWORD kTickRenderCall = 0x0055D8F2;
+static const DWORD kRender = 0x004F4480;
+
+static void __fastcall TickRender(void *map, void *)
+{
+    typedef void (__thiscall *Method)(void *);
+    ((Method)kRender)(map);
+    if (g_tickStart)
+    {
+        if (g_tickMoved)
+            PresentClock::AddCost(PresentClock::g_tickCost, PresentClock::Now() - g_tickStart);
+        CamTrace(3, g_tickStart, g_tickMoved);
+    }
+    g_tickStart = 0;
+}
+
+static void InstallTickRender()
+{
+    if (CallGoesTo(kTickRenderCall, kRender))
+        WriteCall(kTickRenderCall, TickRender);
 }
 
 static __declspec(naked) void ScrollStub()
@@ -120,9 +167,10 @@ static __declspec(naked) void ScrollStub()
         sub esp, 528
         and esp, -16
         fxsave [esp]
+        push dword ptr [ebp + 36]
         push ecx
         call ScrollTickC
-        add esp, 4
+        add esp, 8
         fxrstor [esp]
         mov esp, ebp
         popfd
@@ -168,9 +216,12 @@ static void InstallAll()
              RightScroll::g_profile ? "ready" : "off");
     if (strcmp(g_game->name, "gamemd") == 0)
     {
+        bool tick = InstallPatch("tick camera lead", InstallTickRender);
+        SpeedLog("  tick camera lead %s", tick ? "ready" : "off");
         bool reuse = InstallPatch("unit image reuse", UnitCache::Install);
         SpeedLog("  unit image reuse %s%s", reuse ? "ready" : "off", UnitCache::g_check ? ", checking only" : "");
         bool frames = InstallPatch("frame reuse", FrameReuse::Install);
+        FrameReuse::g_installed = frames;
         SpeedLog("  frame reuse %s%s", frames ? "ready" : "off", FrameReuse::g_check ? ", checking only" : "");
         bool filter = InstallPatch("tree and building filter", LayerFilter::Install);
         SpeedLog("  tree and building filter %s%s", filter ? "ready" : "off", LayerFilter::g_check ? ", checking only" : "");

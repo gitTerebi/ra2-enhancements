@@ -90,6 +90,42 @@ namespace PresentClock
     static LONGLONG g_fasterSince;
     static LONGLONG g_renderBudget;
 
+    struct CostMedian
+    {
+        LONGLONG samples[kCostSamples];
+        int count;
+        int next;
+        LONGLONG value;
+    };
+
+    static CostMedian g_tickCost;
+    static CostMedian g_freshCost;
+    static CostMedian g_reuseCost;
+
+    inline LONGLONG Median(const LONGLONG *samples, int count)
+    {
+        LONGLONG sorted[kCostSamples];
+        memcpy(sorted, samples, sizeof(LONGLONG) * count);
+        for (int i = 1; i < count; ++i)
+            for (int j = i; j > 0 && sorted[j - 1] > sorted[j]; --j)
+            {
+                LONGLONG t = sorted[j];
+                sorted[j] = sorted[j - 1];
+                sorted[j - 1] = t;
+            }
+        return sorted[count / 2];
+    }
+
+    inline void AddCost(CostMedian &m, LONGLONG cost)
+    {
+        m.samples[m.next] = cost;
+        m.next = (m.next + 1) % kCostSamples;
+        if (m.count < kCostSamples)
+            ++m.count;
+        if (m.count >= 8)
+            m.value = Median(m.samples, m.count);
+    }
+
     inline void RecordCost(LONGLONG cost, LONGLONG now)
     {
         g_costs[g_costNext] = cost;
@@ -99,16 +135,7 @@ namespace PresentClock
         if (g_costCount < 8 || !g_period)
             return;
 
-        LONGLONG sorted[kCostSamples];
-        memcpy(sorted, g_costs, sizeof(LONGLONG) * g_costCount);
-        for (int i = 1; i < g_costCount; ++i)
-            for (int j = i; j > 0 && sorted[j - 1] > sorted[j]; --j)
-            {
-                LONGLONG t = sorted[j];
-                sorted[j] = sorted[j - 1];
-                sorted[j - 1] = t;
-            }
-        LONGLONG typical = sorted[g_costCount / 2] + g_freq / 2000;
+        LONGLONG typical = Median(g_costs, g_costCount) + g_freq / 2000;
         g_renderBudget = typical * 3 / 2;
         int wanted = (int)((typical + g_period - 1) / g_period);
         if (wanted < 1)
@@ -135,6 +162,22 @@ namespace PresentClock
         if (now >= g_renderedTarget)
             g_renderedTarget = Target(now) + (g_divisor - 1) * g_period;
         return g_renderedTarget;
+    }
+
+    inline LONGLONG ShownTarget(LONGLONG now, const CostMedian &cost)
+    {
+        LONGLONG target = CameraTarget(now);
+        if (!cost.value)
+            return target;
+        LONGLONG shown = Target(now + cost.value + (LONGLONG)(g_period * kUploadPhaseAfterVBlank) - g_freq / 2000);
+        if (shown > target)
+            g_renderedTarget = target = shown;
+        return target;
+    }
+
+    inline LONGLONG TickAt(LONGLONG deadline)
+    {
+        return Target(deadline - g_period / 2);
     }
 
     inline LONGLONG RenderDue(LONGLONG now)

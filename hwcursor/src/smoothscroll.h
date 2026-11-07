@@ -31,14 +31,13 @@ namespace SmoothScroll
         return *(BYTE *)inputLocked || (tac && *(float *)(tac + kPanRate) != 0.0f);
     }
 
-    inline void Tick(DWORD instance, DWORD setPos, DWORD inputLocked)
+    inline void Tick(DWORD instance, DWORD setPos, DWORD inputLocked, LONGLONG target)
     {
         g_moved = false;
         void *tac = *(void **)instance;
         if (!tac)
             return;
 
-        LONGLONG target = PresentClock::CameraTarget(PresentClock::Now());
         if (g_freq == 0.0)
         {
             LARGE_INTEGER f;

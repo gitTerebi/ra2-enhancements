@@ -23,6 +23,8 @@ namespace FrameReuse
     typedef int (__thiscall *IntFn)(void *);
 
     static bool g_scrollFrame;
+    static bool g_scrollInput;
+    static bool g_installed;
     static BYTE g_cull;
     static bool g_reuse;
     static bool g_check;
@@ -39,6 +41,11 @@ namespace FrameReuse
     static long g_checked, g_differed, g_scrollFrames;
     static long g_declined[6];
     static bool g_loggedGeometry;
+
+    inline bool Fresh()
+    {
+        return !g_prevValid || g_prevFrame != *(DWORD *)kFrame;
+    }
 
     inline BYTE *Tactical()
     {
@@ -102,7 +109,7 @@ namespace FrameReuse
         BYTE *tac = Tactical();
         const int *view = (const int *)kViewBounds;
         g_prevValid = false;
-        if (!surface || !tac)
+        if (!surface || !tac || !(g_scrollInput || g_scrollFrame))
             return;
         void **vt = *(void ***)surface;
         int x0 = view[0], y0 = view[1], w = view[2], h = view[3];
