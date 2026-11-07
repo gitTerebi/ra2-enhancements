@@ -35,17 +35,18 @@ struct SaveProfile
     DWORD mainMenu;
     DWORD inputBlocked;
     DWORD savePattern;
+    const char *quickFiles[2];
 };
 
 static const SaveProfile kSaves[] = {
     {"gamemd", 0x00559353, 0x0055943A, 0x00559D60, 0x00559E40, 0x00887640, 0x00A8B238, 0x00559DBC,
      0x0069BB40, 0x0069BAB0, 0x30D8, 0x0048CE9C, 0x0048C8B0, 0x006CF3CF, 0x00559E85, 0x0067CEF0,
      0x00A83DC8, 0x00A80208, 0x124, 0xBC, 0x00B0F698, 0x00531E05, 0x0054F050, 0x0052E0E1, 0x005587F0, 0x0052DC9A,
-     0x00531CC0, 0x00A8ED9C, 0x00559C3C},
+     0x00531CC0, 0x00A8ED9C, 0x00559C3C, {"QUICKMD.SAV", "QUICKMD2.SAV"}},
     {"game", 0x0053BCE7, 0x0053BDCE, 0x0053C680, 0x0053C760, 0x00839C68, 0x00A3D298, 0x0053C6DC,
      0x00672E70, 0x00672DE0, 0x3080, 0x00481DCC, 0x00481850, 0x0069FCAF, 0x0053C7A5, 0x006554A0,
      0x00A35E28, 0x00A32280, 0x114, 0xA8, 0x00AC0CD8, 0x0051706A, 0x00532320, 0x00513D68, 0x0053B190, 0x005138E9,
-     0x00516F00, 0x00A40D44, 0x0053C5D1},
+     0x00516F00, 0x00A40D44, 0x0053C5D1, {"QUICK.SAV", "QUICK2.SAV"}},
 };
 
 static const BYTE kSwapMissSig[22] = {0xC7, 0x44, 0x24, 0x10, 0x00, 0x00, 0x00, 0x00, 0xB8, 0x01, 0x00,
@@ -87,7 +88,6 @@ static const BYTE kConfirmJumpSig[4] = {0x74, 0x6A, 0x6A, 0x00};
 static const BYTE kSavedBoxSig[7] = {0x8B, 0x16, 0x8B, 0xCE, 0xFF, 0x52, 0x20};
 static const BYTE kLoadWrapSig[5] = {0x68, 0x1C, 0x04, 0x00, 0x00};
 static const BYTE kSaveWrapSig[5] = {0x68, 0x53, 0x04, 0x00, 0x00};
-static const char *const kQuickSaveFiles[2] = {"QUICK.SAV", "QUICK2.SAV"};
 static const wchar_t *const kQuickSaveNames[2] = {L"Quick Save", L"Quick Save 2"};
 
 static const SaveProfile *g_save;
@@ -208,10 +208,10 @@ static bool QuickSavePath(int slot, char *out, size_t outSize)
         }
     }
     char name[MAX_PATH];
-    if (dirLen + strlen(kQuickSaveFiles[slot]) >= sizeof(name))
+    if (dirLen + strlen(g_save->quickFiles[slot]) >= sizeof(name))
         return false;
     memcpy(name, dir, dirLen);
-    strcpy(name + dirLen, kQuickSaveFiles[slot]);
+    strcpy(name + dirLen, g_save->quickFiles[slot]);
     return BesideExe(name, out, outSize);
 }
 
@@ -251,13 +251,13 @@ static bool LoadQuickSave(int slot)
     g_clearedPointers = 0;
     bool tolerant = g_swapMissStub && BytesAt(g_save->swapMiss, kSwapMissSig, sizeof(kSwapMissSig)) &&
                     WriteJmp(g_save->swapMiss, g_swapMissStub, sizeof(kSwapMissSig));
-    bool ok = ((LoadWrapFn)g_save->loadWrap)(kQuickSaveFiles[slot]);
+    bool ok = ((LoadWrapFn)g_save->loadWrap)(g_save->quickFiles[slot]);
     if (tolerant)
         WriteBytes(g_save->swapMiss, kSwapMissSig, sizeof(kSwapMissSig));
     ForgetEscorts();
     if (g_clearedPointers)
         SpeedLog("  quick load: cleared %d pointers to objects missing from the save", g_clearedPointers);
-    SpeedLog("  quick load %s %s", kQuickSaveFiles[slot], ok ? "done" : "failed");
+    SpeedLog("  quick load %s %s", g_save->quickFiles[slot], ok ? "done" : "failed");
     return ok;
 }
 
@@ -270,8 +270,8 @@ static void __cdecl RunPendingSaves()
     if (save)
     {
         int slot = NewestQuickSave() == 0 ? 1 : 0;
-        bool ok = ((SaveWrapFn)g_save->saveWrap)(kQuickSaveFiles[slot], kQuickSaveNames[slot]);
-        SpeedLog("  quick save %s %s", kQuickSaveFiles[slot], ok ? "written" : "failed");
+        bool ok = ((SaveWrapFn)g_save->saveWrap)(g_save->quickFiles[slot], kQuickSaveNames[slot]);
+        SpeedLog("  quick save %s %s", g_save->quickFiles[slot], ok ? "written" : "failed");
     }
     if (!load)
         return;
@@ -406,7 +406,7 @@ static void InstallSaveHook()
     WriteCall(g_save->menuKeyCall, menuKeyStub);
     WriteCall(g_save->mainMenuCall, mainMenuStub);
     SpeedLog("  quick save ready at %X, F5 and F9 use %s and %s, F9 also works on the main menu",
-             g_save->menuCall, kQuickSaveFiles[0], kQuickSaveFiles[1]);
+             g_save->menuCall, g_save->quickFiles[0], g_save->quickFiles[1]);
 }
 
 void InstallQuickSave()

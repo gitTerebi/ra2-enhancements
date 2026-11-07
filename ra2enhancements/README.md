@@ -40,7 +40,8 @@ Revenge** and **Mental Omega**. One small DLL, no launcher, no patched game exe.
   units such as Harriers and Terrorists behave as before, and so do AI units. This works only
   in campaign and skirmish, because it changes game logic.
 - **Quick save and quick load.** In a campaign mission or a skirmish game, F5 saves over the
-  older of `QUICK.SAV` and `QUICK2.SAV`, and F9 loads the newer one. If one quick save is ever
+  older of `QUICK.SAV` and `QUICK2.SAV` (`QUICKMD.SAV` and `QUICKMD2.SAV` in Yuri's Revenge),
+  and F9 loads the newer one. If one quick save is ever
   damaged, the other still holds the save before it. Both keys call the same code as the Save
   and Load buttons, and they run at the same point in the frame, so the files also show up in
   the Load menu as "Quick Save" and "Quick Save 2". F9 also works on the main menu, where it
